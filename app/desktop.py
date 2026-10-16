@@ -48,11 +48,17 @@ def main():
             subprocess.run(['icacls',str(runtime),'/grant','*S-1-15-2-2:(OI)(CI)(RX)','/grant','*S-1-15-2-1:(OI)(CI)(RX)'],creationflags=subprocess.CREATE_NO_WINDOW,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         http=ThreadingHTTPServer(('127.0.0.1',0),server.Handler);thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
         url=f'http://127.0.0.1:{http.server_port}'
-        (DATA/'desktop-state.json').write_text(json.dumps({'url':url,'pid':os.getpid(),'app':str(APP),'runtime':str(runtime),'mode':'portable'}),encoding='utf-8')
+        state={'url':url,'pid':os.getpid(),'app':str(APP),'runtime':str(runtime),'mode':'portable','ready':False}
+        statefile=DATA/'desktop-state.json'
+        statefile.write_text(json.dumps(state),encoding='utf-8')
         webview.settings['ALLOW_DOWNLOADS']=True
         api=DesktopAPI()
         window=webview.create_window('Точки · Prod. by Saudade_meow',url=url,js_api=api,width=1380,height=920,min_size=(1000,700),frameless=True,easy_drag=False,shadow=True,background_color='#090F18',text_select=True)
         api._window=window
+        def loaded():
+            state['ready']=True
+            statefile.write_text(json.dumps(state),encoding='utf-8')
+        window.events.loaded+=loaded
         window.events.closed+=lambda:http.shutdown()
         icon=Path(__file__).resolve().parent/'Точки.ico'
         webview.start(gui='edgechromium',private_mode=False,storage_path=str(DATA/'WebView'),icon=str(icon),debug=False)

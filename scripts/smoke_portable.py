@@ -10,9 +10,13 @@ def upload_bytes(rows):
 try:
  statefile=folder/'Data/desktop-state.json'
  for _ in range(90):
-  if statefile.exists():break
+  try:
+   state=json.loads(statefile.read_text())
+   if state.get('pid')==proc.pid and state.get('ready'):break
+  except (OSError,ValueError):pass
   if proc.poll() is not None:raise RuntimeError('EXE завершился при запуске')
   time.sleep(1)
+ else:raise RuntimeError('Окно встроенного WebView2 не загрузилось за 90 секунд')
  state=json.loads(statefile.read_text());assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']=='portable';url=state['url']
  boundary=uuid.uuid4().hex;body=b''
  files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':upload_bytes([['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05']])}

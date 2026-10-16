@@ -26,8 +26,12 @@ def main():
     for name in ['numpy','pandas','scipy','matplotlib','IPython','PyQt5','PyQt6','PySide6','PySide2','webview.platforms.qt','webview.platforms.gtk','webview.platforms.cocoa','webview.platforms.android','webview.platforms.cef','tkinter']:argv+=['--exclude-module',name]
     PyInstaller.__main__.run(argv)
     folder=out/'Точки';runtime=folder/'WebView2';runtime.mkdir(exist_ok=True)
-    with open(ROOT/'build/runtime-extract.log','w',encoding='utf-8') as log:subprocess.run(['expand.exe',str(cab.resolve()),'-F:*',str(runtime)],check=True,stdout=log,stderr=subprocess.STDOUT)
-    assert any(runtime.rglob('msedgewebview2.exe'))
+    # Git for Windows also ships expand.exe (a text/tab utility). Use the Windows CAB extractor explicitly.
+    expand=Path(os.environ['SystemRoot'])/'System32/expand.exe'
+    extract_log=ROOT/'build/runtime-extract.log'
+    with open(extract_log,'w',encoding='utf-8') as log:subprocess.run([str(expand),str(cab.resolve()),'-F:*',str(runtime)],check=True,stdout=log,stderr=subprocess.STDOUT)
+    if not any(runtime.rglob('msedgewebview2.exe')):
+        raise RuntimeError('WebView2 CAB extraction produced no runtime: '+extract_log.read_text(encoding='utf-8',errors='replace'))
     shutil.copytree(ROOT/'licenses',folder/'licenses',dirs_exist_ok=True)
     import importlib.metadata
     for pkg in ['openpyxl','Pillow','pywebview','pythonnet','clr_loader','cffi','pycparser','proxy_tools','bottle','et_xmlfile','typing_extensions','pyinstaller']:
