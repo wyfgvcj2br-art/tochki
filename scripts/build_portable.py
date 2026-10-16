@@ -26,12 +26,17 @@ def main():
     for name in ['numpy','pandas','scipy','matplotlib','IPython','PyQt5','PyQt6','PySide6','PySide2','webview.platforms.qt','webview.platforms.gtk','webview.platforms.cocoa','webview.platforms.android','webview.platforms.cef','tkinter']:argv+=['--exclude-module',name]
     PyInstaller.__main__.run(argv)
     folder=out/'Точки';runtime=folder/'WebView2';runtime.mkdir(exist_ok=True)
-    # Git for Windows also ships expand.exe (a text/tab utility). Use the Windows CAB extractor explicitly.
+    # Use the Windows CAB extractor with ASCII relative arguments: its legacy
+    # path handling cannot resolve Cyrillic destinations on an English runner.
     expand=Path(os.environ['SystemRoot'])/'System32/expand.exe'
+    cached_cab=cache/f'WebView2-{RUNTIME_VERSION}-x64.cab'
+    if cab.resolve()!=cached_cab.resolve():shutil.copy2(cab,cached_cab)
+    unpacked=cache/'runtime-unpacked';unpacked.mkdir(exist_ok=True)
     extract_log=ROOT/'build/runtime-extract.log'
-    with open(extract_log,'w',encoding='utf-8') as log:subprocess.run([str(expand),str(cab.resolve()),'-F:*',str(runtime)],check=True,stdout=log,stderr=subprocess.STDOUT)
-    if not any(runtime.rglob('msedgewebview2.exe')):
+    with open(extract_log,'w',encoding='utf-8') as log:subprocess.run([str(expand),cached_cab.name,'-F:*',unpacked.name],cwd=cache,check=True,stdout=log,stderr=subprocess.STDOUT)
+    if not any(unpacked.rglob('msedgewebview2.exe')):
         raise RuntimeError('WebView2 CAB extraction produced no runtime: '+extract_log.read_text(encoding='utf-8',errors='replace'))
+    shutil.copytree(unpacked,runtime,dirs_exist_ok=True)
     shutil.copytree(ROOT/'licenses',folder/'licenses',dirs_exist_ok=True)
     import importlib.metadata
     for pkg in ['openpyxl','Pillow','pywebview','pythonnet','clr_loader','cffi','pycparser','proxy_tools','bottle','et_xmlfile','typing_extensions','pyinstaller']:

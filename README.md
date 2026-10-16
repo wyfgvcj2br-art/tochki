@@ -7,7 +7,7 @@ Windows-приложение для подготовки отчётов по т�
 
 ## Скачать
 
-Откройте [последний релиз](../../releases/latest), скачайте `Tochki-Portable-…-win-x64.zip`,
+Откройте [последний релиз](https://github.com/wyfgvcj2br-art/tochki/releases/latest), скачайте `Tochki-Portable-…-win-x64.zip`,
 распакуйте **всю папку** и запустите `Точки.exe`.
 
 Python, браузер и установленный WebView2 не требуются: они включены в комплект.
