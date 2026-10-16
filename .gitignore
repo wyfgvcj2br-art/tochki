@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+.cache/
+Data/
+Результаты/
+WebView2/
+*.cab
+*.exe
+*.zip
+*.xlsx
+.server.json
+Ошибка.txt
+*.spec
