@@ -1,4 +1,4 @@
-ТОЧКИ 2.1 PORTABLE · Prod. by Saudade_meow
+ТОЧКИ 2.1.1 PORTABLE · Prod. by Saudade_meow
 
 Распакуйте ВЕСЬ архив в папку с правом записи. Запустите Точки.exe.
 Не переносите EXE отдельно от _internal и WebView2.

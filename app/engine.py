@@ -55,6 +55,9 @@ def analyze(files):
         except Exception as e: raise ValueError(f'Не удалось открыть «{filename}». Нужен исправный XLSX.') from e
         recognized=False
         for sheet in book:
+            # BI exports may declare dimension="A1" even when records follow.
+            # Stream actual worksheet cells instead of trusting cached bounds.
+            sheet.reset_dimensions()
             rows=sheet.iter_rows(values_only=True); cs=None; kind=None
             for rn,row in enumerate(rows,1):
                 if cs is None:

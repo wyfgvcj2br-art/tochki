@@ -1,5 +1,5 @@
 """Test the packaged app, not the build-time Python environment (Windows CI)."""
-import argparse,io,json,os,subprocess,time,urllib.request,uuid,zipfile
+import argparse,io,json,os,re,subprocess,time,urllib.request,uuid,zipfile
 from pathlib import Path
 import openpyxl
 parser=argparse.ArgumentParser();parser.add_argument('folder',type=Path);args=parser.parse_args();folder=args.folder.resolve();proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=folder)
@@ -7,6 +7,14 @@ def upload_bytes(rows):
  w=openpyxl.Workbook()
  for row in rows:w.active.append(row)
  blob=io.BytesIO();w.save(blob);return blob.getvalue()
+def bi_export(rows):
+ blob=upload_bytes(rows);output=io.BytesIO()
+ with zipfile.ZipFile(io.BytesIO(blob)) as source,zipfile.ZipFile(output,'w') as target:
+  for name in source.namelist():
+   value=source.read(name)
+   if name=='xl/worksheets/sheet1.xml':value=re.sub(rb'<dimension\b[^>]*/>',b'<dimension ref="A1"/>',value)
+   target.writestr(name,value)
+ return output.getvalue()
 try:
  statefile=folder/'Data/desktop-state.json'
  for _ in range(90):
@@ -19,14 +27,14 @@ try:
  else:raise RuntimeError('Окно встроенного WebView2 не загрузилось за 90 секунд')
  state=json.loads(statefile.read_text());assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']=='portable';url=state['url']
  boundary=uuid.uuid4().hex;body=b''
- files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':upload_bytes([['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05']])}
+ files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':bi_export([['Примененные фильтры: контрольный экспорт'],[],['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05']])}
  for filename,blob in files.items():body+=f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{filename}"\r\n\r\n'.encode()+blob+b'\r\n'
  body+=f'--{boundary}--\r\n'.encode()
  def call(path,body,content_type='application/json'):
   req=urllib.request.Request(url+path,data=body,headers={'Content-Type':content_type,'X-Local-App':'tt-reports','Origin':url})
   with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
- a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['errors'],a
- g=call('/api/generate',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined','journal':True,'excludeUnknown':True}}).encode());assert g['audit']['orders']==100 and g['audit']['late']==5
+ a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['errors'],a;assert a['appealCount']==1,a
+ g=call('/api/generate',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined','journal':True,'excludeUnknown':True}}).encode());assert g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['appeals']==1
  assert (folder/'Результаты'/g['run']/'Отчёт.xlsx').is_file()
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  print('Packaged portable smoke test passed.')
