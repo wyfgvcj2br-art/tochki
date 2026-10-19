@@ -5,9 +5,11 @@ from email.policy import default
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from engine import analyze,generate,select,selection_inputs,DEFAULT_CODES
+from collector_names import NameDirectory,directory_view,sightings,apply_directory
 ASSETS=Path(__file__).resolve().parent
 ROOT=Path(os.environ.get('TT_DATA_DIR',str(ASSETS)));ROOT.mkdir(parents=True,exist_ok=True)
 RESULTS=Path(os.environ.get('TT_OUTPUT_DIR',str(ROOT/'Результаты')))
+NAMES=NameDirectory(ROOT)
 JOBS={};RUNS={};LOCK=threading.Lock();APP_ID=hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
 def json_bytes(v):return json.dumps(v,ensure_ascii=False).encode('utf-8')
 class Handler(BaseHTTPRequestHandler):
@@ -57,14 +59,22 @@ class Handler(BaseHTTPRequestHandler):
                     if len(JOBS)>=10:JOBS.pop(next(iter(JOBS)))
                     JOBS[jid]=data
                 summary={k:data[k] for k in ['warnings','errors','sources','tts','unknownCount']}
-                summary.update(id=jid,dailyCount=len(data['daily']),collectorCount=len(data['collectors']),appealCount=len(data['appeals']),fileCount=len(files),dates=sorted({r['date'] for r in [*data['daily'],*data['appeals'],*data['collectors']]}))
+                summary.update(id=jid,dailyCount=len(data['daily']),collectorCount=len(data['collectors']),appealCount=len(data['appeals']),fileCount=len(files),dates=sorted({r['date'] for r in [*data['daily'],*data['appeals'],*data['collectors']]}),nameDirectory=directory_view(data,NAMES.read()))
                 return self.reply(200,summary)
             payload=json.loads(body);data=JOBS.get(payload.get('id'))
+            if p=='/api/collector-names':return self.reply(200,directory_view(data,NAMES.read()))
+            if p=='/api/collector-names/save':
+                state=NAMES.save(payload.get('entries'),payload.get('revision'),sightings(data))
+                return self.reply(200,directory_view(data,state))
+            if p=='/api/collector-names/remove':
+                state=NAMES.save([],payload.get('revision'),remove=payload.get('collectorId'))
+                return self.reply(200,directory_view(data,state))
             if p=='/api/open':
                 folder=RUNS.get(payload.get('run'))
                 if not folder:raise ValueError('Папка отчёта не найдена.')
                 os.startfile(folder);return self.reply(200,{'ok':True})
             if not data:raise ValueError('Сначала загрузите выгрузки заново.')
+            data=apply_directory(data,NAMES.read())
             if p=='/api/preview':
                 if payload.get('options',{}).get('mode')=='details':
                     from details import detail_selection

@@ -50,7 +50,7 @@ def main():
     if python_license.is_file():shutil.copy2(python_license,folder/'licenses/PYTHON-LICENSE.txt')
     shutil.copy2(ROOT/'PORTABLE.txt',folder/'Прочитать.txt')
     for name in ['Data','Результаты']:(folder/name).mkdir(exist_ok=True)
-    version=(ROOT/'VERSION').read_text().strip();manifest={'version':version,'platform':'windows-x64','distribution':'portable-folder','runtime':RUNTIME_VERSION,'runtime_cab_sha256':RUNTIME_SHA256,'settings':'Data/settings.json','results':'Результаты','producer':'Saudade_meow'}
+    version=(ROOT/'VERSION').read_text().strip();manifest={'version':version,'platform':'windows-x64','distribution':'portable-folder','runtime':RUNTIME_VERSION,'runtime_cab_sha256':RUNTIME_SHA256,'settings':'Data/settings.json','collectorNames':'Data/collector-names.json','results':'Результаты','producer':'Saudade_meow'}
     (folder/'portable.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     archive=out/f'Tochki-Portable-{version}-win-x64.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:

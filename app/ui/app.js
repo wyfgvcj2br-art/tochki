@@ -9,7 +9,7 @@ function setBusy(value,label){busy=value;$('generate').disabled=value||!analysis
 async function api(path,body,form=false){let r=await fetch(path,{method:'POST',headers:{'X-Local-App':'tt-reports',...(form?{}:{'Content-Type':'application/json'})},body:form?body:JSON.stringify(body)});let v=await r.json();if(!r.ok)throw Error(v.error||'Не удалось обработать запрос.');return v;}
 function fileList(){$('file-list').innerHTML=files.map((f,i)=>`<div class="file-item"><span class="xls">XLSX</span><span class="filename" title="${esc(f.name)}">${esc(f.name)}</span><span class="size">${Math.max(1,Math.round(f.size/1024))} КБ</span><button class="remove-file" data-remove="${i}" aria-label="Убрать ${esc(f.name)}">×</button></div>`).join('');$('analyze').hidden=!files.length;}
 async function addFiles(list){if(busy)return;let rejected=0;for(const f of list){if(!f.name.toLowerCase().endsWith('.xlsx')){rejected++;continue;}if(!files.some(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified))files.push(f);}fileList();if(rejected)notice('Поддерживаются только файлы XLSX. Остальные файлы не добавлены.','error');if(files.length)await analyzeFiles();}
-async function analyzeFiles(){if(busy||!files.length)return;analysis=null;preview=null;result=null;$('results-card').hidden=true;$('data-card').hidden=true;setBusy(true,'Проверяем файлы…');notice('Читаем столбцы и сопоставляем торговые точки…');const form=new FormData();files.forEach(f=>form.append('files',f,f.name));try{analysis=await api('/api/analyze',form,true);$('empty-preview').hidden=true;$('step-2').classList.add('active');$('available-tts').textContent=analysis.tts.map(t=>t.name).join('\n');if(analysis.collectorCount&&!analysis.dailyCount){$('mode').value='details';applyMode();}if(analysis.errors.length){notice(analysis.errors.join('\n'),'error');$('generate').disabled=true;}else{notice('');await updatePreview();}}catch(e){notice(e.message,'error');}finally{setBusy(false);}}
+async function analyzeFiles(){if(busy||!files.length)return;analysis=null;preview=null;result=null;$('results-card').hidden=true;$('data-card').hidden=true;setBusy(true,'Проверяем файлы…');notice('Читаем столбцы и сопоставляем торговые точки…');const form=new FormData();files.forEach(f=>form.append('files',f,f.name));try{analysis=await api('/api/analyze',form,true);$('empty-preview').hidden=true;$('step-2').classList.add('active');$('available-tts').textContent=analysis.tts.map(t=>t.name).join('\n');if(analysis.collectorCount&&!analysis.dailyCount){$('mode').value='details';applyMode();}if(analysis.errors.length){notice(analysis.errors.join('\n'),'error');$('generate').disabled=true;}else{notice('');await updatePreview();}if(analysis.nameDirectory?.pending.length)await openNameDirectory();}catch(e){notice(e.message,'error');}finally{setBusy(false);}}
 function badge(v){let o=opts(),cl=v==null?'':v<=o.good/100?'good':v>o.bad/100?'bad':'mid';return `<span class="pct ${cl}">${percent(v)}</span>`;}
 function drawPreview(){if(!preview)return;if(preview.mode==='details')return drawDetailsPreview();const code=$('preview-tt').value,g=preview.groups.find(g=>g.code===code)||preview.groups[0];if(!g)return;const o=opts(),amap={};if(o.mode!=='late')for(const a of g.appeals)(amap[a.date]??=[]).push(a);let html='';let records=o.mode==='appeals'?Object.keys(amap).sort().map(date=>({date})):g.days;
 for(const d of records){html+=`<tr><td>${day(d.date)}</td><td>${d.orders==null?'':fmt(d.orders)}</td><td>${d.late==null?'':fmt(d.late)}</td><td>${o.mode==='appeals'?'':badge(d.pct)}</td><td></td></tr>`;for(const a of amap[d.date]||[])html+=`<tr class="appeal-row"><td>↳ ${esc(a.name||'ФИО не указано')}</td><td></td><td></td><td></td><td>${fmt(a.count)}</td></tr>`;}
@@ -47,3 +47,44 @@ function drawDetailsPreview(){
  $('preview-body').innerHTML=html;
 }
 applyMode();
+
+let nameDirectory=null,namesSaving=false;
+function namesStatus(message,error=false){$('names-status').textContent=message;$('names-status').className=message?'notice '+(error?'error':'info'):'';}
+function renderNames(view){
+ nameDirectory=view;
+ const pending=view.pending.map(r=>nameRow(r,false)).join('');
+ const saved=view.entries.map(r=>nameRow(r,true)).join('');
+ $('names-list').innerHTML=`<h3>Нужны ФИО · ${view.pending.length}</h3>${pending||'<p>Нет неизвестных сборщиков с доступным ID в загруженных файлах.</p>'}<h3>Сохранённые привязки · ${view.entries.length}</h3>${saved||'<p>Справочник пока пуст.</p>'}`;
+ $('names-save').disabled=!view.pending.some(r=>r.bindable)&&!view.entries.length;
+}
+function nameRow(r,saved){
+ const context=(r.tts||[]).map(esc).join('<br>')||'ТТ появится после загрузки выгрузки';
+ const hint=!saved&&r.knownNames?.length?`<p class="names-hint">В других строках этого ID найдено: ${r.knownNames.map(esc).join('; ')}. Проверьте в 1С.</p>`:'';
+ return `<section class="name-row"><div class="name-context"><b>ID ${esc(r.id||'отсутствует')}</b><p>${context}</p>${r.dates?.length?`<small>${r.dates.map(day).join(', ')}</small>`:''}</div><div>${saved||r.bindable?`<label for="collector-name-${esc(r.id)}">ФИО сборщика</label><input id="collector-name-${esc(r.id)}" data-name-id="${esc(r.id)}" value="${esc(saved?r.name:'')}" maxlength="160" autocomplete="off" placeholder="Введите ФИО из 1С">${hint}`:'<p>В исходнике нет номера сборщика. Нужен ID из выгрузки для сохранения привязки.</p>'}</div></section>`;
+}
+async function openNameDirectory(){
+ if(namesSaving)return;
+ try{const view=await api('/api/collector-names',{id:analysis?.id});renderNames(view);namesStatus('');if(!$('names-dialog').open)$('names-dialog').showModal();}
+ catch(e){notice(e.message,'error');}
+}
+$('nav-names').addEventListener('click',openNameDirectory);
+for(const id of ['names-close','names-later'])$(id).addEventListener('click',()=>{if(!namesSaving)$('names-dialog').close();});
+$('names-refresh').addEventListener('click',openNameDirectory);
+$('names-dialog').addEventListener('cancel',e=>{if(namesSaving)e.preventDefault();});
+$('names-form').addEventListener('submit',async e=>{
+ e.preventDefault();if(namesSaving||!nameDirectory)return;
+ const saved=new Map(nameDirectory.entries.map(r=>[r.id,r.name])),entries=[];
+ for(const input of $('names-list').querySelectorAll('[data-name-id]')){
+  const name=input.value.trim(),id=input.dataset.nameId;
+  if(!name&&saved.has(id)){namesStatus('Сохранённое ФИО нельзя оставить пустым. Введите исправленное ФИО.',true);input.focus();return;}
+  if(name&&name!==saved.get(id))entries.push({id,name});
+ }
+ if(!entries.length){namesStatus('Заполните ФИО хотя бы у одного ID или исправьте сохранённую привязку.');return;}
+ namesSaving=true;$('names-save').disabled=true;$('names-refresh').disabled=true;
+ try{
+  const view=await api('/api/collector-names/save',{id:analysis?.id,revision:nameDirectory.revision,entries});
+  renderNames(view);namesStatus(`Сохранено привязок: ${entries.length}. Они уже применены к предпросмотру. Для готовых PNG и Excel соберите отчёт заново.`);
+  result=null;$('results-card').hidden=true;await updatePreview();
+ }catch(error){namesStatus(error.message,true);}
+ finally{namesSaving=false;$('names-save').disabled=!nameDirectory.pending.some(r=>r.bindable)&&!nameDirectory.entries.length;$('names-refresh').disabled=false;}
+});

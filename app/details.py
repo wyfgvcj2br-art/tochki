@@ -13,6 +13,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from PIL import Image, ImageDraw
 
 from engine import DEFAULT_CODES, BLUE, font, n, pct
+from collector_names import collector_id
 
 LIMIT=.06
 
@@ -33,11 +34,14 @@ def detail_selection(data,opts):
     bad=[r for r in days if r['orders'] and r['late']/r['orders']>=LIMIT]
     indexed=collections.defaultdict(list)
     for row in data['collectors']:indexed[row['code'],row['date']].append(row)
-    grouped=collections.defaultdict(list);unknown_rows=0;source_rows=0;mismatches=[]
+    grouped=collections.defaultdict(list);unknown_rows=0;source_rows=0;mismatches=[];hidden=[]
     for daily in bad:
         key=daily['code'],daily['date'];raw=indexed[key]
         label=f'{daily["tt"]}, {dt.date.fromisoformat(daily["date"]):%d.%m.%Y}'
         if not raw:raise ValueError(f'Нет детализации сборщиков для {label}. Добавьте выгрузку за этот день.')
+        hidden.extend(dict(r) for r in raw if collector_id(r.get('collectorId'))=='0')
+        source_rows+=len(raw)
+        raw=[r for r in raw if collector_id(r.get('collectorId'))!='0']
         orders=sum(r['orders'] for r in raw);late=sum(r['late'] for r in raw)
         differs=not math.isclose(orders,daily['orders'],rel_tol=1e-10,abs_tol=1e-9) or not math.isclose(late,daily['late'],rel_tol=1e-10,abs_tol=1e-9)
         different_date_fields=daily.get('dateField')=='Дата и время начала слота' and all(r.get('dateField')=='date_collected' for r in raw)
@@ -47,10 +51,11 @@ def detail_selection(data,opts):
         for row in raw:
             # Store aliases and source role/name variants may split one person's day.
             identity=('id',row['collectorId']) if row['collectorId'] else ('name',row['name'])
-            person=people.setdefault(identity,{'name':'','collectorId':row['collectorId'],'orders':0,'late':0,'sources':[]})
+            person=people.setdefault(identity,{'name':'','nameFromRegistry':False,'collectorId':row['collectorId'],'orders':0,'late':0,'sources':[]})
             if row['name']:
-                if person['name'] and person['name']!=row['name']:raise ValueError(f'У одного номера сборщика разные ФИО: {label}. Проверьте исходную выгрузку.')
-                person['name']=row['name']
+                mapped=bool(row.get('nameFromRegistry'))
+                if person['name'] and person['name']!=row['name'] and not mapped and not person['nameFromRegistry']:raise ValueError(f'У одного номера сборщика разные ФИО: {label}. Проверьте исходную выгрузку.')
+                if not person['name'] or not mapped:person.update(name=row['name'],nameFromRegistry=mapped)
             person['orders']+=row['orders'];person['late']+=row['late'];person['sources'].append(row['source'])
         rows=list(people.values())
         for person in rows:
@@ -59,22 +64,23 @@ def detail_selection(data,opts):
         rows.sort(key=lambda r:(-r['late'],-(r['pct'] or 0),r['name'].casefold(),r['collectorId']))
         # Store counts select the day only. Every displayed measure comes from collectors.
         grouped[daily['code']].append({**daily,'storeOrders':daily['orders'],'storeLate':daily['late'],'storePct':daily['late']/daily['orders'],'orders':orders,'late':late,'pct':late/orders if orders else None,'collectors':rows,'sourceRows':len(raw),'totalsDiffer':differs,'differentDateFields':different_date_fields})
-        source_rows+=len(raw)
     groups=[]
     for code,records in sorted(grouped.items()):
         differs=any(r['totalsDiffer'] for r in records)
         note='Показатели — из выгрузки сборщиков; дни выбраны по просроку ТТ.'
-        if differs:note='Есть расхождения с итогами ТТ. Показатели — из выгрузки сборщиков.'
+        if any(collector_id(r.get('collectorId'))=='0' and r['code']==code for r in hidden):note='ID 0 исключён из строк и итогов; дни — по исходному просроку ТТ.'
+        elif differs:note='Есть расхождения с итогами ТТ. Показатели — из выгрузки сборщиков.'
         groups.append({'code':code,'tt':records[0]['tt'],'days':records,'orders':sum(r['orders'] for r in records),'late':sum(r['late'] for r in records),'storeOrders':sum(r['storeOrders'] for r in records),'storeLate':sum(r['storeLate'] for r in records),'totalsDiffer':differs,'dateNote':note,'appeals':[]})
     warnings=list(data['warnings'])
+    if hidden:warnings.append(f'ID 0 скрыт из детализации и её итогов: строк — {len(hidden)}, заказов — {sum(r["orders"] for r in hidden):g}, просроченных — {sum(r["late"] for r in hidden):g}. Порог дней по исходной таблице ТТ не изменён.')
     for mismatch in mismatches:
         label=f'{mismatch["tt"]}, {dt.date.fromisoformat(mismatch["date"]):%d.%m.%Y}'
         warnings.append(f'{label}: ТТ — {mismatch["storeOrders"]:g} заказов / {mismatch["storeLate"]:g} просроченных; сборщики — {mismatch["collectorOrders"]:g} / {mismatch["collectorLate"]:g}. Детализация взята из таблицы сборщиков без изменения чисел. Причина расхождения по агрегированной выгрузке не подтверждена.')
     normal=sorted({r['code'] for r in days}-set(grouped))
     if normal:warnings.append('Нет дней с просроком от 6% включительно; PNG не требуется для ТТ: '+', '.join(normal)+'.')
-    if unknown_rows:warnings.append(f'Сборщиков без ФИО в детализации: {unknown_rows}. Их заказы сохранены, чтобы итоги совпадали с ТТ.')
+    if unknown_rows:warnings.append(f'Сборщиков без ФИО в детализации: {unknown_rows}. Их заказы сохранены; ФИО можно привязать к ID в справочнике.')
     if not groups:warnings.append('За выбранный период ни у одной выбранной ТТ нет дней с общим просроком от 6% включительно.')
-    return {'mode':'details','measureSource':'collectors','groups':groups,'dates':dates,'period':[dates[0],dates[-1]],'threshold':LIMIT,'thresholdInclusive':True,'badDays':len(bad),'collectorCount':sum(len(d['collectors']) for g in groups for d in g['days']),'collectorSourceRows':source_rows,'unknownCollectors':unknown_rows,'normalCodes':normal,'mismatchCount':len(mismatches),'mismatches':mismatches,'appeals':0,'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups),'storeOrders':sum(g['storeOrders'] for g in groups),'storeLate':sum(g['storeLate'] for g in groups),'warnings':warnings,'canGenerate':bool(groups)}
+    return {'mode':'details','nameBindingsUsed':data.get('nameBindingsUsed',[]),'nameRegistryRevision':data.get('nameRegistryRevision'),'hiddenIdZero':{'rows':len(hidden),'orders':sum(r['orders'] for r in hidden),'late':sum(r['late'] for r in hidden)},'measureSource':'collectors','groups':groups,'dates':dates,'period':[dates[0],dates[-1]],'threshold':LIMIT,'thresholdInclusive':True,'badDays':len(bad),'collectorCount':sum(len(d['collectors']) for g in groups for d in g['days']),'collectorSourceRows':source_rows,'unknownCollectors':unknown_rows,'normalCodes':normal,'mismatchCount':len(mismatches),'mismatches':mismatches,'appeals':0,'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups),'storeOrders':sum(g['storeOrders'] for g in groups),'storeLate':sum(g['storeLate'] for g in groups),'warnings':warnings,'canGenerate':bool(groups)}
 
 
 def detail_rows(group):
@@ -146,7 +152,7 @@ def generate_details(data,opts,folder):
         elif c.data_type=='f':c.number_format='0.00%'
     wb.save(folder/'Отчёт.xlsx')
     audit={k:v for k,v in preview.items() if k!='groups'}
-    audit.update(created=dt.datetime.now().isoformat(timespec='seconds'),stores=len(preview['groups']),dailyRecords=preview['badDays'],appealRecords=0,weeklyPct=preview['late']/preview['orders'] if preview['orders'] else None,sources=data['sources'],details=preview['groups'],checks=['Дни выбраны по общему просроку ТТ от 6% включительно','Все показатели детализации и итоги взяты из выгрузки сборщиков','Сверка с ТТ выполнена; расхождения отражены предупреждениями без изменения данных','Дедупликация заказов по сборочным листам не выполнялась: в выгрузке нет номеров заказов и листов','Сборщики без ФИО сохранены в итогах','Один PNG на ТТ, период до семи календарных дней','Итоги относятся только к выбранным дням'])
+    audit.update(created=dt.datetime.now().isoformat(timespec='seconds'),stores=len(preview['groups']),dailyRecords=preview['badDays'],appealRecords=0,weeklyPct=preview['late']/preview['orders'] if preview['orders'] else None,sources=data['sources'],details=preview['groups'],checks=['Дни выбраны по общему просроку ТТ от 6% включительно','Все показатели детализации и итоги взяты из выгрузки сборщиков','Сверка с ТТ выполнена; расхождения отражены предупреждениями без изменения данных','Дедупликация заказов по сборочным листам не выполнялась: в выгрузке нет номеров заказов и листов','Сборщики без ФИО сохранены в итогах, кроме скрытого ID 0','Один PNG на ТТ, период до семи календарных дней','Итоги относятся только к выбранным дням'])
     (folder/'Проверка.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
     with zipfile.ZipFile(folder/'Все результаты.zip','w',zipfile.ZIP_DEFLATED) as archive:
         for p in [folder/'Отчёт.xlsx',folder/'Проверка.json',*sorted(images.glob('*.png'))]:archive.write(p,p.relative_to(folder))

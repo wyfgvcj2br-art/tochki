@@ -1,6 +1,7 @@
 from __future__ import annotations
 import collections, datetime as dt, hashlib, io, json, math, re, textwrap, zipfile
 from pathlib import Path
+from collector_names import collector_id
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.formatting.rule import CellIsRule, FormulaRule
@@ -88,7 +89,7 @@ def analyze(files):
                             if pct is not None and (not orders or not math.isclose(pct,late/orders,rel_tol=1e-9,abs_tol=1e-12)):
                                 if orders or late or pct:raise ValueError('Доля просрока сборщика не совпадает с просроченными / успешными заказами.')
                             raw_name=clean_name(get('name'));name='' if unknown(raw_name) or norm(raw_name) in {'na','нетданных'} else raw_name
-                            rec.update(name=name,collectorId=str(get('collectorId') or '').strip(),role=str(get('role') or '').strip())
+                            rec.update(name=name,collectorId=collector_id(get('collectorId')),role=str(get('role') or '').strip())
                             identity=(tt,day,rec['helper'],rec['collectorId'],name,rec['role'])
                             if identity in collectors:
                                 previous=collectors[identity]

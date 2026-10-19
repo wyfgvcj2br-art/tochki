@@ -50,6 +50,29 @@ try:
  assert preview['groups'][0]['days'][0]['date']=='2026-01-06'
  g=call('/api/generate',payload);assert g['audit']['mode']=='details' and g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['storeLate']==6 and g['audit']['mismatchCount']==1 and len(g['images'])==1
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
- print('Packaged portable smoke test passed.')
+ # Confirmed names must persist across process restart and new uploads.
+ view=call('/api/collector-names',b'{}');assert not view['entries']
+ assert [r['id'] for r in a['nameDirectory']['pending']]==['2']
+ view=call('/api/collector-names/save',json.dumps({'id':a['id'],'revision':view['revision'],'entries':[{'id':'2','name':'Демо Сохранённый Сборщик'}]}).encode())
+ assert not view['pending'] and len(view['entries'])==1
+ preview=call('/api/preview',payload);assert preview['unknownCollectors']==0 and preview['orders']==100 and preview['late']==5
+ g=call('/api/generate',payload);assert g['audit']['nameBindingsUsed']==[{'id':'2','name':'Демо Сохранённый Сборщик'}]
+ w=openpyxl.load_workbook(folder/'Результаты'/g['run']/'Отчёт.xlsx');assert any(r[0]=='Демо Сохранённый Сборщик' for r in w.active.values);w.close()
+ subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);proc.wait(timeout=15)
+ proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=folder)
+ for _ in range(90):
+  try:
+   state=json.loads(statefile.read_text())
+   if state.get('pid')==proc.pid and state.get('ready'):break
+  except (OSError,ValueError):pass
+  if proc.poll() is not None:raise RuntimeError('EXE завершился при повторном запуске')
+  time.sleep(1)
+ else:raise RuntimeError('Повторный запуск EXE: timeout')
+ url=state['url'];view=call('/api/collector-names',b'{}');assert view['entries'][0]['name']=='Демо Сохранённый Сборщик'
+ a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['nameDirectory']['pending']
+ preview=call('/api/preview',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'details'}}).encode());assert preview['unknownCollectors']==0 and preview['orders']==100 and preview['late']==5
+ call('/api/collector-names/remove',json.dumps({'revision':view['revision'],'collectorId':'2'}).encode())
+ assert not call('/api/collector-names',b'{}')['entries']
+ print('Packaged portable smoke test passed, including saved-name restart and re-upload.')
 finally:
  subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
