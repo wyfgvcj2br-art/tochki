@@ -35,17 +35,18 @@ def date(x,epoch):
         except ValueError:pass
     raise ValueError(f'Не удалось прочитать дату «{x}».')
 ALIASES={
- 'tt':['Наименование ТТ','ТТ'], 'date':['Дата и время начала слота','Дни','Дата'],
+ 'tt':['Наименование ТТ','ТТ'], 'date':['Дата и время начала слота','date_collected','Дни','Дата'],
  'orders':['Заказы в статусе Успешно завершен','Кол-во заказов УЗ','Кол-во заказов (УЗ)'],
  'late':['Общее кол-во заказов, просроченных по сборке','Общее количество просроченных заказов'],
  'pct':['Общая доля заказов, просроченных по сборке','Общая доля(по дням)'],
- 'helper':['Помощник','Лидер сервиса офлайн'], 'name':['Сборщик'], 'count':['абс','Количество обращений']}
+ 'helper':['Помощник','Лидер сервиса офлайн'], 'name':['Сборщик'], 'count':['абс','Количество обращений'],
+ 'collectorId':['Номер сборщика'], 'role':['Свойство сборщика']}
 def columns(row):
     hs={norm(v):i for i,v in enumerate(row) if v is not None}
     return {k:next((hs[norm(a)] for a in aliases if norm(a) in hs),None) for k,aliases in ALIASES.items()}
 
 def analyze(files):
-    daily={}; appeals=[]; warnings=[]; errors=[]; sources=[]; hashes=set(); ignored=0
+    daily={}; collectors={}; appeals=[]; warnings=[]; errors=[]; sources=[]; hashes=set(); ignored=0
     for filename,blob in files:
         digest=hashlib.sha256(blob).hexdigest()
         if digest in hashes:
@@ -63,7 +64,8 @@ def analyze(files):
                 if cs is None:
                     if rn>40:break
                     candidate=columns(row)
-                    if all(candidate[k] is not None for k in ['tt','date','orders','late']):cs=candidate;kind='daily'
+                    if all(candidate[k] is not None for k in ['tt','date','orders','late','name']):cs=candidate;kind='collectors'
+                    elif all(candidate[k] is not None for k in ['tt','date','orders','late']):cs=candidate;kind='daily'
                     elif all(candidate[k] is not None for k in ['tt','date','name','count']):cs=candidate;kind='appeals'
                     if cs is not None:recognized=True;sources.append({'file':filename,'sheet':sheet.title,'kind':kind,'header':rn})
                     continue
@@ -75,13 +77,25 @@ def analyze(files):
                 try:
                     tt=str(get('tt')).strip(); day=date(get('date'),book.epoch); key=(code(tt),day)
                     if not re.match(r'^\d{4}',tt):raise ValueError('У точки нет четырёхзначного кода.')
-                    if kind=='daily':
+                    if kind in {'daily','collectors'}:
                         orders=number(get('orders'));late=number(get('late'))
                         if orders<0 or late<0 or late>orders:raise ValueError('Количество просроченных должно быть от 0 до числа заказов.')
                         pct=get('pct')
-                        pct=number(pct) if pct is not None else (late/orders if orders else None)
+                        pct=number(pct) if pct is not None and not(kind=='collectors' and norm(pct) in {'na',''}) else (late/orders if orders else None)
                         if pct is not None and not 0<=pct<=1:raise ValueError('Доля просрока должна быть от 0 до 100%.')
                         rec={'tt':tt,'code':key[0],'date':day,'orders':orders,'late':late,'pct':pct,'helper':str(get('helper') or '').strip(),'source':f'{filename} / {sheet.title}, строка {rn}'}
+                        if kind=='collectors':
+                            if pct is not None and (not orders or not math.isclose(pct,late/orders,rel_tol=1e-9,abs_tol=1e-12)):
+                                if orders or late or pct:raise ValueError('Доля просрока сборщика не совпадает с просроченными / успешными заказами.')
+                            raw_name=clean_name(get('name'));name='' if unknown(raw_name) or norm(raw_name) in {'na','нетданных'} else raw_name
+                            rec.update(name=name,collectorId=str(get('collectorId') or '').strip(),role=str(get('role') or '').strip())
+                            identity=(tt,day,rec['helper'],rec['collectorId'],name,rec['role'])
+                            if identity in collectors:
+                                previous=collectors[identity]
+                                if all(previous[x]==rec[x] for x in ['orders','late','pct']):
+                                    warnings.append(f'Повтор строки сборщика: {tt}, {day}; учтён один раз.');continue
+                                errors.append(f'Разные значения сборщика {name or "без ФИО"} для {tt}, {day}: {previous["source"]} и {rec["source"]}.');continue
+                            collectors[identity]=rec;continue
                         if key in daily:
                             prev=daily[key]
                             if all(prev[x]==rec[x] for x in ['orders','late','pct']):
@@ -97,9 +111,9 @@ def analyze(files):
         book.close()
         if not recognized:errors.append(f'В «{filename}» не найдены исходные столбцы ТТ, даты и показателей. Загружайте исходную выгрузку, а не готовый отчёт.')
     tts={}
-    for r in [*appeals,*daily.values()]:tts[r['code']]={'code':r['code'],'name':r['tt']}
+    for r in [*appeals,*collectors.values(),*daily.values()]:tts[r['code']]={'code':r['code'],'name':r['tt']}
     if ignored:warnings.append(f'Служебных строк без ТТ или даты пропущено: {ignored}.')
-    return {'daily':list(daily.values()),'appeals':appeals,'warnings':list(dict.fromkeys(warnings)), 'errors':errors,'sources':sources,'tts':sorted(tts.values(),key=lambda x:x['code']), 'unknownCount':sum(a['unknown'] for a in appeals)}
+    return {'daily':list(daily.values()),'collectors':list(collectors.values()),'appeals':appeals,'warnings':list(dict.fromkeys(warnings)), 'errors':errors,'sources':sources,'tts':sorted(tts.values(),key=lambda x:x['code']), 'unknownCount':sum(a['unknown'] for a in appeals)}
 
 def selection_inputs(data,opts):
     selected=set(opts.get('codes',DEFAULT_CODES)); mode=opts.get('mode','combined')
@@ -182,6 +196,9 @@ def picture(group,dates,path,good,bad,only_appeals=False):
 
 def generate(data,opts,folder):
     if data['errors']:raise ValueError('Сначала устраните ошибки в загруженных данных.')
+    if opts.get('mode')=='details':
+        from details import generate_details
+        return generate_details(data,opts,folder)
     groups,dates,apps=select(data,opts); good=float(opts.get('good',6))/100;bad=float(opts.get('bad',10))/100
     if not 0<=good<bad<=1:raise ValueError('Пороги должны быть от 0 до 100%, зелёный порог — меньше красного.')
     mode=opts.get('mode','combined');only_apps=mode=='appeals'

@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
                     if len(JOBS)>=10:JOBS.pop(next(iter(JOBS)))
                     JOBS[jid]=data
                 summary={k:data[k] for k in ['warnings','errors','sources','tts','unknownCount']}
-                summary.update(id=jid,dailyCount=len(data['daily']),appealCount=len(data['appeals']),fileCount=len(files),dates=sorted({r['date'] for r in [*data['daily'],*data['appeals']]}))
+                summary.update(id=jid,dailyCount=len(data['daily']),collectorCount=len(data['collectors']),appealCount=len(data['appeals']),fileCount=len(files),dates=sorted({r['date'] for r in [*data['daily'],*data['appeals'],*data['collectors']]}))
                 return self.reply(200,summary)
             payload=json.loads(body);data=JOBS.get(payload.get('id'))
             if p=='/api/open':
@@ -66,6 +66,9 @@ class Handler(BaseHTTPRequestHandler):
                 os.startfile(folder);return self.reply(200,{'ok':True})
             if not data:raise ValueError('Сначала загрузите выгрузки заново.')
             if p=='/api/preview':
+                if payload.get('options',{}).get('mode')=='details':
+                    from details import detail_selection
+                    return self.reply(200,detail_selection(data,payload['options']))
                 options=payload.get('options',{});groups,dates,apps=select(data,options)
                 return self.reply(200,{'groups':groups,'dates':dates,'appeals':len(apps),'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups),**selection_inputs(data,options)[2]})
             if p=='/api/generate':
