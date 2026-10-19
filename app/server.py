@@ -4,7 +4,7 @@ from email.parser import BytesParser
 from email.policy import default
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
-from engine import analyze,generate,select,DEFAULT_CODES
+from engine import analyze,generate,select,selection_inputs,DEFAULT_CODES
 ASSETS=Path(__file__).resolve().parent
 ROOT=Path(os.environ.get('TT_DATA_DIR',str(ASSETS)));ROOT.mkdir(parents=True,exist_ok=True)
 RESULTS=Path(os.environ.get('TT_OUTPUT_DIR',str(ROOT/'Результаты')))
@@ -66,8 +66,8 @@ class Handler(BaseHTTPRequestHandler):
                 os.startfile(folder);return self.reply(200,{'ok':True})
             if not data:raise ValueError('Сначала загрузите выгрузки заново.')
             if p=='/api/preview':
-                groups,dates,apps=select(data,payload.get('options',{}))
-                return self.reply(200,{'groups':groups,'dates':dates,'appeals':len(apps),'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups)})
+                options=payload.get('options',{});groups,dates,apps=select(data,options)
+                return self.reply(200,{'groups':groups,'dates':dates,'appeals':len(apps),'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups),**selection_inputs(data,options)[2]})
             if p=='/api/generate':
                 rid=dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+'_'+secrets.token_hex(3);folder=RESULTS/rid
                 audit=generate(data,payload.get('options',{}),folder);RUNS[rid]=folder

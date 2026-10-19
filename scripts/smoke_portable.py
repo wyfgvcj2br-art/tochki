@@ -27,14 +27,16 @@ try:
  else:raise RuntimeError('Окно встроенного WebView2 не загрузилось за 90 секунд')
  state=json.loads(statefile.read_text());assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']=='portable';url=state['url']
  boundary=uuid.uuid4().hex;body=b''
- files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':bi_export([['Примененные фильтры: контрольный экспорт'],[],['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05']])}
+ files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':bi_export([['Примененные фильтры: контрольный экспорт'],[],['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05'],['Ранее(456)','9001_Демо',2,'2025-07-17'],['Позже(789)','9001_Демо',3,'2026-01-06']])}
  for filename,blob in files.items():body+=f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{filename}"\r\n\r\n'.encode()+blob+b'\r\n'
  body+=f'--{boundary}--\r\n'.encode()
  def call(path,body,content_type='application/json'):
   req=urllib.request.Request(url+path,data=body,headers={'Content-Type':content_type,'X-Local-App':'tt-reports','Origin':url})
   with urllib.request.urlopen(req,timeout=30) as r:return json.load(r)
- a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['errors'],a;assert a['appealCount']==1,a
+ a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['errors'],a;assert a['appealCount']==3,a
+ preview=call('/api/preview',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined'}}).encode());assert preview['dates']==['2026-01-05'] and preview['appeals']==1 and preview['outsidePeriodRecords']==2 and preview['outsidePeriodAppeals']==5 and preview['warnings']
  g=call('/api/generate',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined','journal':True,'excludeUnknown':True}}).encode());assert g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['appeals']==1
+ assert g['audit']['outsidePeriodRecords']==2 and g['audit']['outsidePeriodAppeals']==5
  assert (folder/'Результаты'/g['run']/'Отчёт.xlsx').is_file()
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  print('Packaged portable smoke test passed.')

@@ -101,10 +101,27 @@ def analyze(files):
     if ignored:warnings.append(f'Служебных строк без ТТ или даты пропущено: {ignored}.')
     return {'daily':list(daily.values()),'appeals':appeals,'warnings':list(dict.fromkeys(warnings)), 'errors':errors,'sources':sources,'tts':sorted(tts.values(),key=lambda x:x['code']), 'unknownCount':sum(a['unknown'] for a in appeals)}
 
+def selection_inputs(data,opts):
+    selected=set(opts.get('codes',DEFAULT_CODES)); mode=opts.get('mode','combined')
+    days=[r for r in data['daily'] if r['code'] in selected] if mode!='appeals' else []
+    apps=[r for r in data['appeals'] if r['code'] in selected] if mode!='late' else []
+    period=[min(r['date'] for r in days),max(r['date'] for r in days)] if days else None
+    outside=[]
+    if period:
+        outside=[a for a in apps if not period[0]<=a['date']<=period[1]]
+        apps=[a for a in apps if period[0]<=a['date']<=period[1]]
+    removed=[a for a in apps if opts.get('excludeUnknown',True) and a['unknown']]
+    apps=[a for a in apps if not(opts.get('excludeUnknown',True) and a['unknown'])]
+    warnings=list(data['warnings'])
+    if outside:
+        start,end=(dt.date.fromisoformat(d).strftime('%d.%m.%Y') for d in period)
+        warnings.append(f'Период отчёта: {start} — {end}. За его пределами пропущено строк обращений: {len(outside)}; обращений: {sum(a["count"] for a in outside):g}.')
+    scope={'period':period,'outsidePeriodRecords':len(outside),'outsidePeriodAppeals':sum(a['count'] for a in outside),'excludedUnknown':len(removed),'excludedUnknownAppeals':sum(a['count'] for a in removed),'warnings':warnings}
+    return days,apps,scope
+
 def select(data,opts):
-    selected=set(opts.get('codes',DEFAULT_CODES)); exclude=opts.get('excludeUnknown',True)
-    days=[r for r in data['daily'] if r['code'] in selected]
-    apps=[r for r in data['appeals'] if r['code'] in selected and not(exclude and r['unknown'])] if opts.get('mode')!='late' else []
+    selected=set(opts.get('codes',DEFAULT_CODES))
+    days,apps,_=selection_inputs(data,opts)
     dates={r['date'] for r in [*days,*apps]}
     if not dates:raise ValueError('Нет данных по выбранным торговым точкам.')
     lookup=collections.defaultdict(list)
@@ -239,7 +256,8 @@ def generate(data,opts,folder):
     assert sum(len(g['appeals']) for g in groups)==len(apps)
     assert len(list(images.glob('*.png')))==len(groups)
     totalorders=sum(g['orders'] for g in groups);totallate=sum(g['late'] for g in groups)
-    audit={'created':dt.datetime.now().isoformat(timespec='seconds'),'stores':len(groups),'dailyRecords':sum(len(g['days']) for g in groups),'appealRecords':len(apps),'appeals':sum(a['count'] for a in apps),'orders':totalorders,'late':totallate,'weeklyPct':totallate/totalorders if totalorders else None,'excludedUnknown':data['unknownCount'] if opts.get('excludeUnknown',True) else 0,'thresholds':{'good':good,'bad':bad},'sources':data['sources'],'warnings':data['warnings'],'checks':['Дневные количества совпадают с исходниками','Все выбранные обращения распределены по ТТ и датам','Недельные итоги считаются по суммам, а не средним процентам','Один PNG для каждой ТТ','XLSX повторно открывается без ошибок']}
+    scope=selection_inputs(data,opts)[2]
+    audit={'created':dt.datetime.now().isoformat(timespec='seconds'),'stores':len(groups),'dailyRecords':sum(len(g['days']) for g in groups),'appealRecords':len(apps),'appeals':sum(a['count'] for a in apps),'orders':totalorders,'late':totallate,'weeklyPct':totallate/totalorders if totalorders else None,**scope,'thresholds':{'good':good,'bad':bad},'sources':data['sources'],'checks':['Дневные количества совпадают с исходниками','Все выбранные обращения распределены по ТТ и датам','Недельные итоги считаются по суммам, а не средним процентам','Один PNG для каждой ТТ','XLSX повторно открывается без ошибок']}
     (folder/'Проверка.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
     archive=folder/'Все результаты.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:

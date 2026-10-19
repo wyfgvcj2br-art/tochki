@@ -2,7 +2,7 @@ import datetime,io,re,sys,tempfile,unittest,zipfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 import openpyxl
-from engine import analyze,select,generate,clean_name
+from engine import analyze,select,generate,clean_name,selection_inputs
 def xlsx(rows):
     w=openpyxl.Workbook()
     for row in rows:w.active.append(row)
@@ -40,8 +40,36 @@ class EngineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=TEST_TMP) as tmp:
             with self.assertRaises(ValueError):generate(data,self.options,tmp)
     def test_unmatched_appeal_is_visible(self):
-        data=self.data();data['daily']=data['daily'][1:]
+        data=self.data();data['daily'][1]['date']='2026-01-07';data['appeals'][0]['date']='2026-01-06'
         with self.assertRaises(ValueError):select(data,self.options)
+    def test_appeals_outside_daily_period_are_reported_and_excluded(self):
+        data=self.data()
+        for date,count in [('2025-07-17',3),('2026-01-07',4)]:
+            data['appeals'].append({**data['appeals'][0],'date':date,'count':count})
+        data['appeals'].append({**data['appeals'][1],'date':'2025-07-17','count':5})
+        groups,dates,apps=select(data,self.options)
+        self.assertEqual(dates,['2026-01-05','2026-01-06']);self.assertEqual(sum(a['count'] for a in apps),2)
+        scope=selection_inputs(data,self.options)[2]
+        self.assertEqual(scope['outsidePeriodRecords'],3);self.assertEqual(scope['outsidePeriodAppeals'],12)
+        self.assertEqual(scope['excludedUnknown'],1);self.assertEqual(scope['excludedUnknownAppeals'],1)
+        self.assertIn('05.01.2026 — 06.01.2026',scope['warnings'][-1])
+        with tempfile.TemporaryDirectory(dir=TEST_TMP) as tmp:
+            audit=generate(data,self.options,tmp)
+            self.assertEqual(audit['outsidePeriodRecords'],3);self.assertEqual(audit['appeals'],2)
+            self.assertEqual(audit['period'],['2026-01-05','2026-01-06']);self.assertEqual(audit['excludedUnknown'],1)
+    def test_period_boundaries_include_appeals(self):
+        data=self.data();data['appeals'][1]['unknown']=False;data['appeals'][1]['name']='Второй Сотрудник'
+        groups,dates,apps=select(data,self.options)
+        self.assertEqual(len(apps),2);self.assertEqual(sum(a['count'] for a in apps),3)
+    def test_appeals_only_does_not_limit_to_daily_period(self):
+        data=self.data();data['appeals'][0]['date']='2025-07-17'
+        groups,dates,apps=select(data,{**self.options,'mode':'appeals'})
+        self.assertEqual(dates,['2025-07-17']);self.assertEqual(len(apps),1);self.assertEqual(groups[0]['days'],[])
+        self.assertEqual(selection_inputs(data,{**self.options,'mode':'appeals'})[2]['outsidePeriodRecords'],0)
+    def test_missing_date_for_store_inside_period_still_blocks(self):
+        data=self.data();data['daily'].append({**data['daily'][0],'code':'9002','tt':'9002_Демо','date':'2026-01-07'})
+        data['appeals'][0]['date']='2026-01-07'
+        with self.assertRaises(ValueError):select(data,{**self.options,'codes':['9001','9002']})
     def test_unknown_is_opt_in(self):
         data=self.data();self.assertEqual(len(select(data,self.options)[2]),1);self.assertEqual(len(select(data,{**self.options,'excludeUnknown':False})[2]),2)
     def test_late_only_ignores_unmatched_appeals(self):
