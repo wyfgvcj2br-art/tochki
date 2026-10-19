@@ -2,7 +2,10 @@
 import argparse,io,json,os,re,subprocess,time,urllib.request,uuid,zipfile
 from pathlib import Path
 import openpyxl
-parser=argparse.ArgumentParser();parser.add_argument('folder',type=Path);args=parser.parse_args();folder=args.folder.resolve();proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=folder)
+parser=argparse.ArgumentParser();parser.add_argument('folder',type=Path);args=parser.parse_args();folder=args.folder.resolve();output=folder/'Smoke reports';settingsfile=folder/'Data/settings.json';settingsfile.parent.mkdir(exist_ok=True)
+assert not settingsfile.exists(),'Smoke test requires a fresh build folder.'
+settingsfile.write_text(json.dumps({'outputFolder':{'path':'Smoke reports','relative':True}}),encoding='utf-8')
+proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=folder)
 def upload_bytes(rows):
  w=openpyxl.Workbook()
  for row in rows:w.active.append(row)
@@ -37,7 +40,9 @@ try:
  preview=call('/api/preview',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined'}}).encode());assert preview['dates']==['2026-01-05'] and preview['appeals']==1 and preview['outsidePeriodRecords']==2 and preview['outsidePeriodAppeals']==5 and preview['warnings']
  g=call('/api/generate',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'combined','journal':True,'excludeUnknown':True}}).encode());assert g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['appeals']==1
  assert g['audit']['outsidePeriodRecords']==2 and g['audit']['outsidePeriodAppeals']==5
- assert (folder/'Результаты'/g['run']/'Отчёт.xlsx').is_file()
+ assert (output/g['run']/'Отчёт.xlsx').is_file()
+ assert Path(g['folder']).parent==output
+ assert not list((folder/'Результаты').iterdir())
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  # Collector exports have a different grain from daily store totals.
  detail_files={'stores.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-05',100,5],['9001_Демо','2026-01-06',100,6]]),'collectors.xlsx':bi_export([['Наименование ТТ','date_collected','Номер сборщика','Сборщик','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-06','1','Демо Сборщик',40,5],['9001_Демо','2026-01-06','2','N/A',60,0]])}
@@ -57,7 +62,7 @@ try:
  assert not view['pending'] and len(view['entries'])==1
  preview=call('/api/preview',payload);assert preview['unknownCollectors']==0 and preview['orders']==100 and preview['late']==5
  g=call('/api/generate',payload);assert g['audit']['nameBindingsUsed']==[{'id':'2','name':'Демо Сохранённый Сборщик'}]
- w=openpyxl.load_workbook(folder/'Результаты'/g['run']/'Отчёт.xlsx');assert any(r[0]=='Демо Сохранённый Сборщик' for r in w.active.values);w.close()
+ w=openpyxl.load_workbook(output/g['run']/'Отчёт.xlsx');assert any(r[0]=='Демо Сохранённый Сборщик' for r in w.active.values);w.close()
  subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);proc.wait(timeout=15)
  proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=folder)
  for _ in range(90):
@@ -68,7 +73,9 @@ try:
   if proc.poll() is not None:raise RuntimeError('EXE завершился при повторном запуске')
   time.sleep(1)
  else:raise RuntimeError('Повторный запуск EXE: timeout')
- url=state['url'];view=call('/api/collector-names',b'{}');assert view['entries'][0]['name']=='Демо Сохранённый Сборщик'
+ url=state['url']
+ with urllib.request.urlopen(url+'/api/output-folder') as r:assert json.load(r)['path']==str(output)
+ view=call('/api/collector-names',b'{}');assert view['entries'][0]['name']=='Демо Сохранённый Сборщик'
  a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['nameDirectory']['pending']
  preview=call('/api/preview',json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'details'}}).encode());assert preview['unknownCollectors']==0 and preview['orders']==100 and preview['late']==5
  call('/api/collector-names/remove',json.dumps({'revision':view['revision'],'collectorId':'2'}).encode())

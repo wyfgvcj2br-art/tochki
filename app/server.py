@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from engine import analyze,generate,select,selection_inputs,DEFAULT_CODES
 from collector_names import NameDirectory,directory_view,sightings,apply_directory
+from output_folders import check_folder
 ASSETS=Path(__file__).resolve().parent
 ROOT=Path(os.environ.get('TT_DATA_DIR',str(ASSETS)));ROOT.mkdir(parents=True,exist_ok=True)
 RESULTS=Path(os.environ.get('TT_OUTPUT_DIR',str(ROOT/'Результаты')))
@@ -22,6 +23,7 @@ class Handler(BaseHTTPRequestHandler):
             p=urllib.parse.urlparse(self.path).path
             if self.headers.get('Host') not in [f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}']:return self.reply(403,{'error':'Недопустимый адрес приложения.'})
             if p=='/api/health':return self.reply(200,{'app':APP_ID})
+            if p=='/api/output-folder':return self.reply(200,{'path':str(RESULTS)})
             if p=='/api/config':return self.reply(200,{'codes':DEFAULT_CODES,'version':'1.0'})
             if p.startswith('/files/'):
                 bits=p.split('/');rid=bits[2];filename=urllib.parse.unquote('/'.join(bits[3:]));folder=RUNS.get(rid)
@@ -82,9 +84,10 @@ class Handler(BaseHTTPRequestHandler):
                 options=payload.get('options',{});groups,dates,apps=select(data,options)
                 return self.reply(200,{'groups':groups,'dates':dates,'appeals':len(apps),'orders':sum(g['orders'] for g in groups),'late':sum(g['late'] for g in groups),**selection_inputs(data,options)[2]})
             if p=='/api/generate':
-                rid=dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+'_'+secrets.token_hex(3);folder=RESULTS/rid
+                root=check_folder(RESULTS,create=True)
+                rid=dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')+'_'+secrets.token_hex(3);folder=root/rid
                 audit=generate(data,payload.get('options',{}),folder);RUNS[rid]=folder
-                return self.reply(200,{'run':rid,'audit':audit,'archive':f'/files/{rid}/'+urllib.parse.quote('Все результаты.zip'),'excel':f'/files/{rid}/'+urllib.parse.quote('Отчёт.xlsx'),'images':[{'name':f.name,'url':f'/files/{rid}/'+urllib.parse.quote('Изображения/'+f.name)} for f in sorted((folder/'Изображения').glob('*.png'))]})
+                return self.reply(200,{'run':rid,'folder':str(folder),'audit':audit,'archive':f'/files/{rid}/'+urllib.parse.quote('Все результаты.zip'),'excel':f'/files/{rid}/'+urllib.parse.quote('Отчёт.xlsx'),'images':[{'name':f.name,'url':f'/files/{rid}/'+urllib.parse.quote('Изображения/'+f.name)} for f in sorted((folder/'Изображения').glob('*.png'))]})
             self.reply(404,{'error':'Команда не найдена.'})
         except (ValueError,KeyError) as e:self.reply(400,{'error':str(e)})
         except Exception as e:

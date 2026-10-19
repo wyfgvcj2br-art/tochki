@@ -1,6 +1,7 @@
 from __future__ import annotations
 import ctypes,json,os,sys,threading,traceback,subprocess
 from pathlib import Path
+from output_folders import resolve_folder,folder_setting,check_folder
 APP=Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent
 DATA=APP/'Data'
 try:DATA.mkdir(parents=True,exist_ok=True)
@@ -30,12 +31,36 @@ class DesktopAPI:
         if not isinstance(value,dict):return False
         keys={'codes','good','bad','excludeUnknown','journal','outline','mode'}
         return self._save('options',{k:v for k,v in value.items() if k in keys})
+    def get_output_folder(self):
+        import server
+        return {'path':str(server.RESULTS)}
+    def choose_output_folder(self):
+        import server,webview
+        try:
+            current=server.RESULTS
+            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER,directory=str(current if current.is_dir() else APP))
+            if not chosen:return {'cancelled':True,'path':str(current)}
+            path=check_folder(chosen[0])
+            self._save('outputFolder',folder_setting(APP,path))
+            server.RESULTS=path
+            return {'path':str(path)}
+        except (ValueError,OSError) as error:return {'error':str(error)}
+    def open_output_folder(self):
+        import server
+        try:
+            path=server.RESULTS
+            if not path.is_dir():raise ValueError('Папка отчётов недоступна. Выберите другую папку.')
+            os.startfile(path)
+            return {'ok':True}
+        except (ValueError,OSError) as error:return {'error':str(error)}
 settings_lock=threading.Lock()
 def main():
     try:
         import webview
         import server
         from http.server import ThreadingHTTPServer
+        api=DesktopAPI()
+        server.RESULTS=resolve_folder(APP,api.load_settings().get('outputFolder'))
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SaudadeMeow.Tochki.Portable.2.1')
         runtime_root=APP/'WebView2'
         runtimes=sorted(runtime_root.rglob('msedgewebview2.exe')) if runtime_root.is_dir() else []
@@ -52,7 +77,6 @@ def main():
         statefile=DATA/'desktop-state.json'
         statefile.write_text(json.dumps(state),encoding='utf-8')
         webview.settings['ALLOW_DOWNLOADS']=True
-        api=DesktopAPI()
         window=webview.create_window('Точки · Prod. by Saudade_meow',url=url,js_api=api,width=1380,height=920,min_size=(1000,700),frameless=True,easy_drag=False,shadow=True,background_color='#090F18',text_select=True)
         api._window=window
         def loaded():
