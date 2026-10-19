@@ -1,4 +1,4 @@
-ТОЧКИ 2.3.0 PORTABLE · Prod. by Saudade_meow
+ТОЧКИ 2.3.1 PORTABLE · Prod. by Saudade_meow
 
 Распакуйте ВЕСЬ архив в папку с правом записи. Запустите Точки.exe.
 Не переносите EXE отдельно от _internal и WebView2.
@@ -47,3 +47,6 @@ WebView2 распространяется по отдельным условия
 https://aka.ms/privacy
 https://learn.microsoft.com/en-us/microsoft-edge/privacy-whitepaper#smartscreen
 Само приложение не загружает исходные XLSX на внешние серверы.
+
+В PNG нет служебных сообщений, звёздочек и подсветки расхождений.
+Пояснения — в приложении, листе «Примечания», Примечания.txt и Проверка.json.

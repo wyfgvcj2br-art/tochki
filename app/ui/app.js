@@ -40,7 +40,7 @@ function drawDetailsPreview(){
  if(!g){$('preview-body').innerHTML='';return;}
  let html='';
  for(const d of g.days){
-  html+=`<tr class="${d.totalsDiffer?'reconciliation-row':'total-row'}"><td>${day(d.date)} · сборщики${d.totalsDiffer?' *':''}</td><td>${fmt(d.orders)}</td><td>${fmt(d.late)}</td><td>${detailBadge(d.pct)}</td></tr>`;
+  html+=`<tr class="total-row"><td>${day(d.date)}</td><td>${fmt(d.orders)}</td><td>${fmt(d.late)}</td><td>${detailBadge(d.pct)}</td></tr>`;
   for(const p of d.collectors)html+=`<tr><td>${esc(p.name||'ФИО не указано')}</td><td>${fmt(p.orders)}</td><td>${fmt(p.late)}</td><td>${detailBadge(p.pct)}</td></tr>`;
  }
  html+=`<tr class="total-row"><td>Итого по сборщикам за эти дни</td><td>${fmt(g.orders)}</td><td>${fmt(g.late)}</td><td>${detailBadge(g.orders?g.late/g.orders:null)}</td></tr>`;

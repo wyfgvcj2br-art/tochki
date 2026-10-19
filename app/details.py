@@ -86,7 +86,7 @@ def detail_selection(data,opts):
 def detail_rows(group):
     rows=[]
     for day in group['days']:
-        rows.append(([dt.date.fromisoformat(day['date']).strftime('%d.%m.%Y')+' · сборщики'+(' *' if day['totalsDiffer'] else ''),n(day['orders']),n(day['late']),pct(day['pct'])],day['pct'],'day-warning' if day['totalsDiffer'] else 'day'))
+        rows.append(([dt.date.fromisoformat(day['date']).strftime('%d.%m.%Y'),n(day['orders']),n(day['late']),pct(day['pct'])],day['pct'],'day'))
         for p in day['collectors']:rows.append(([p['name'] or 'ФИО не указано',n(p['orders']),n(p['late']),pct(p['pct'])],p['pct'],'person'))
     ratio=group['late']/group['orders'] if group['orders'] else None
     rows.append((['Итого по сборщикам за эти дни',n(group['orders']),n(group['late']),pct(ratio)],ratio,'total'))
@@ -94,17 +94,16 @@ def detail_rows(group):
 
 
 def detail_picture(group,dates,path):
-    rows=detail_rows(group);width=1500;edges=(0,820,1040,1260,1500);header=225;rh=50
+    rows=detail_rows(group);width=1500;edges=(0,820,1040,1260,1500);header=193;rh=50
     im=Image.new('RGB',(width,header+rh*len(rows)),'white');draw=ImageDraw.Draw(im)
     draw.text((20,16),group['tt'],font=font(30,True),fill='#243E52')
     draw.text((20,62),f'{dt.date.fromisoformat(dates[0]):%d.%m.%Y} — {dt.date.fromisoformat(dates[-1]):%d.%m.%Y}',font=font(20),fill='#607484')
     draw.text((20,96),f'Детализация сборщиков · просрок ТТ ≥ 6% · дней: {len(group["days"])}',font=font(20),fill='#607484')
-    draw.text((20,128),group['dateNote'],font=font(18),fill='#9A5B20' if group['totalsDiffer'] else '#607484')
-    draw.rectangle((0,165,width,header),fill='#'+BLUE)
+    draw.rectangle((0,133,width,header),fill='#'+BLUE)
     for i,label in enumerate(('Дата / Сборщик','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок')):
-        draw.text(((edges[i]+edges[i+1])/2,195),label,font=font(20,True),fill='white',anchor='mm')
+        draw.text(((edges[i]+edges[i+1])/2,163),label,font=font(20,True),fill='white',anchor='mm')
     for j,(values,ratio,kind) in enumerate(rows):
-        y=header+j*rh;bold=kind!='person';fill='#FFF2CC' if kind=='day-warning' else '#DCE6ED' if bold else ('white' if j%2 else '#F7FAFC')
+        y=header+j*rh;bold=kind!='person';fill='#DCE6ED' if bold else ('white' if j%2 else '#F7FAFC')
         draw.rectangle((0,y,width,y+rh),fill=fill)
         draw.rectangle((1260,y,width,y+rh),fill=detail_color(ratio))
         for col,value in enumerate(values):
@@ -127,15 +126,13 @@ def generate_details(data,opts,folder):
     for group in preview['groups']:
         ws.append([group['tt']]);ws.cell(ws.max_row,1).font=Font(name='Arial',size=15,bold=True,color=BLUE)
         ws.append([f'{dt.date.fromisoformat(preview["dates"][0]):%d.%m.%Y} — {dt.date.fromisoformat(preview["dates"][-1]):%d.%m.%Y} · Только дни с просроком ТТ ≥ 6%'])
-        ws.append([group['dateNote']]);ws.cell(ws.max_row,1).font=Font(name='Arial',italic=True,color='9A5B20' if group['totalsDiffer'] else '607484')
         ws.append(['Дата / Сборщик','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок'])
         for c in ws[ws.max_row]:c.fill=PatternFill('solid',fgColor=BLUE);c.font=Font(name='Arial',bold=True,color='FFFFFF')
         refs=[]
         for day in group['days']:
             start=ws.max_row+1;refs.append(start);ws.append([dt.date.fromisoformat(day['date']),day['orders'],day['late'],day['pct']]);ws.cell(start,1).number_format='dd.mm.yyyy'
-            if day['totalsDiffer']:ws.cell(start,1).number_format='dd.mm.yyyy" *"'
             for p in day['collectors']:ws.append([p['name'] or 'ФИО не указано',p['orders'],p['late'],p['pct']])
-            for c in ws[start]:c.font=Font(name='Arial',bold=True,size=11);c.fill=PatternFill('solid',fgColor='FFF2CC' if day['totalsDiffer'] else 'DCE6ED')
+            for c in ws[start]:c.font=Font(name='Arial',bold=True,size=11);c.fill=PatternFill('solid',fgColor='DCE6ED')
         total=ws.max_row+1
         ws.append(['Итого по сборщикам за эти дни','=SUM('+','.join(f'B{r}' for r in refs)+')','=SUM('+','.join(f'C{r}' for r in refs)+')',f'=IF(B{total}=0,"",C{total}/B{total})'])
         for c in ws[total]:c.font=Font(name='Arial',bold=True,size=11);c.fill=PatternFill('solid',fgColor='DCE6ED')
@@ -150,10 +147,16 @@ def generate_details(data,opts,folder):
         if isinstance(c.value,(int,float)):
             c.number_format='0.00%';c.fill=PatternFill('solid',fgColor=detail_color(c.value).lstrip('#'))
         elif c.data_type=='f':c.number_format='0.00%'
+    notes=list(dict.fromkeys([*[g['tt']+': '+g['dateNote'] for g in preview['groups']],*preview['warnings']]))
+    ns=wb.create_sheet('Примечания');ns.sheet_view.showGridLines=False;ns.column_dimensions['A'].width=120
+    ns.append(['Примечания к данным']);ns['A1'].font=Font(name='Arial',bold=True,size=15,color=BLUE)
+    for note in notes:
+        ns.append([note]);cell=ns.cell(ns.max_row,1);cell.font=Font(name='Arial',size=11);cell.alignment=Alignment(wrap_text=True,vertical='top');ns.row_dimensions[ns.max_row].height=max(36,18*(len(note)//110+1))
     wb.save(folder/'Отчёт.xlsx')
+    (folder/'Примечания.txt').write_text('Примечания к данным\n\n'+'\n\n'.join(notes),encoding='utf-8')
     audit={k:v for k,v in preview.items() if k!='groups'}
     audit.update(created=dt.datetime.now().isoformat(timespec='seconds'),stores=len(preview['groups']),dailyRecords=preview['badDays'],appealRecords=0,weeklyPct=preview['late']/preview['orders'] if preview['orders'] else None,sources=data['sources'],details=preview['groups'],checks=['Дни выбраны по общему просроку ТТ от 6% включительно','Все показатели детализации и итоги взяты из выгрузки сборщиков','Сверка с ТТ выполнена; расхождения отражены предупреждениями без изменения данных','Дедупликация заказов по сборочным листам не выполнялась: в выгрузке нет номеров заказов и листов','Сборщики без ФИО сохранены в итогах, кроме скрытого ID 0','Один PNG на ТТ, период до семи календарных дней','Итоги относятся только к выбранным дням'])
     (folder/'Проверка.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
     with zipfile.ZipFile(folder/'Все результаты.zip','w',zipfile.ZIP_DEFLATED) as archive:
-        for p in [folder/'Отчёт.xlsx',folder/'Проверка.json',*sorted(images.glob('*.png'))]:archive.write(p,p.relative_to(folder))
+        for p in [folder/'Отчёт.xlsx',folder/'Примечания.txt',folder/'Проверка.json',*sorted(images.glob('*.png'))]:archive.write(p,p.relative_to(folder))
     return audit

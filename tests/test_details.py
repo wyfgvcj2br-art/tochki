@@ -1,4 +1,5 @@
 import datetime as dt
+import copy
 import io
 import json
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 import openpyxl
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from engine import analyze,generate
-from details import detail_selection
+from details import detail_selection,detail_picture,detail_rows
 
 
 def book(rows):
@@ -78,6 +79,30 @@ class DetailTests(unittest.TestCase):
     def test_maximum_seven_calendar_days_without_silent_truncation(self):
         daily=[DAILY,['9001_Демо','2026-01-05',100,7],['9001_Демо','2026-01-12',100,7]]
         with self.assertRaisesRegex(ValueError,'7 календарных'):detail_selection(self.data(daily),self.opts)
+    def test_administrative_notes_do_not_affect_png_and_stay_in_notes(self):
+        from PIL import Image,ImageChops
+        data=self.data();data['collectors'][1]['collectorId']='0'
+        preview=detail_selection(data,self.opts);group=preview['groups'][0]
+        self.assertTrue(group['totalsDiffer']);self.assertIn('ID 0',group['dateNote'])
+        clean=copy.deepcopy(group);clean['dateNote']='';clean['totalsDiffer']=False
+        for day in clean['days']:day['totalsDiffer']=False
+        self.assertEqual(detail_rows(group),detail_rows(clean))
+        self.assertEqual(detail_rows(group)[0][0][0],'06.01.2026')
+        with tempfile.TemporaryDirectory(dir=TMP) as tmp:
+            folder=Path(tmp)
+            detail_picture(group,preview['dates'],folder/'with-notes.png')
+            detail_picture(clean,preview['dates'],folder/'without-notes.png')
+            with Image.open(folder/'with-notes.png') as a,Image.open(folder/'without-notes.png') as b:
+                self.assertIsNone(ImageChops.difference(a,b).getbbox())
+            audit=generate(data,self.opts,folder/'report')
+            self.assertEqual((audit['orders'],audit['late']),(40,7))
+            w=openpyxl.load_workbook(folder/'report/Отчёт.xlsx')
+            self.assertFalse(any('ID 0' in str(c.value) or 'расхождени' in str(c.value) for row in w.active for c in row))
+            daycell=next(r[0] for r in w.active if isinstance(r[0].value,dt.datetime))
+            self.assertEqual(daycell.number_format,'dd.mm.yyyy');self.assertEqual(daycell.fill.fgColor.rgb[-6:],'DCE6ED')
+            self.assertTrue(any('ID 0' in str(r[0]) for r in w['Примечания'].values));w.close()
+            self.assertIn('ID 0',(folder/'report/Примечания.txt').read_text(encoding='utf-8'))
+            with zipfile.ZipFile(folder/'report/Все результаты.zip') as z:self.assertIn('Примечания.txt',z.namelist())
     def test_one_image_for_seven_days_and_second_store(self):
         daily=[DAILY];people=[PEOPLE]
         for i in range(7):
@@ -87,7 +112,7 @@ class DetailTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=TMP) as tmp:
             result=generate(self.data(daily,people),{**self.opts,'codes':['9001','9002']},tmp)
             self.assertEqual((result['stores'],result['badDays']),(2,8));self.assertEqual(len(list((Path(tmp)/'Изображения').glob('*.png'))),2)
-            wb=openpyxl.load_workbook(Path(tmp)/'Отчёт.xlsx');self.assertEqual(wb.sheetnames,['Детализация сборщиков'])
+            wb=openpyxl.load_workbook(Path(tmp)/'Отчёт.xlsx');self.assertEqual(wb.sheetnames,['Детализация сборщиков','Примечания'])
             self.assertIsNone(zipfile.ZipFile(Path(tmp)/'Все результаты.zip').testzip())
     def test_store_alias_and_name_variant_are_merged_by_person_id(self):
         daily=[DAILY,['9001М_Демо','2026-01-06',100,7]]
