@@ -50,11 +50,31 @@ class DetailTests(unittest.TestCase):
         daily=[DAILY,['9001_Демо','2026-01-05',100000,5999]]
         people=[PEOPLE,['9001_Демо','2026-01-05','1','Сборщик','Продавец',100000,5999,.05999]]
         self.assertEqual(detail_selection(self.data(daily,people),self.opts)['badDays'],0)
-    def test_missing_day_and_mismatched_totals_block(self):
+    def test_missing_day_blocks_but_differences_warn_without_changing_collectors(self):
         data=self.data();data['collectors'][0]['date']='2026-01-07';data['collectors'][1]['date']='2026-01-07'
         with self.assertRaisesRegex(ValueError,'Нет детализации'):detail_selection(data,self.opts)
         data=self.data();data['collectors'][0]['orders']=39
-        with self.assertRaisesRegex(ValueError,'Не сходится'):detail_selection(data,self.opts)
+        preview=detail_selection(data,self.opts)
+        self.assertEqual(preview['mismatchCount'],1);self.assertTrue(preview['warnings']);self.assertTrue(preview['canGenerate'])
+        self.assertEqual((preview['orders'],preview['late'],preview['storeOrders']),(99,7,100))
+        self.assertEqual(preview['groups'][0]['days'][0]['collectors'][0]['orders'],39)
+        self.assertEqual(preview['groups'][0]['days'][0]['pct'],7/99)
+    def test_store_selects_day_but_collector_summary_below_threshold_is_preserved(self):
+        data=self.data();data['collectors'][0]['late']=5
+        p=detail_selection(data,self.opts);self.assertEqual(p['badDays'],1)
+        self.assertEqual(p['groups'][0]['days'][0]['pct'],.05);self.assertEqual(p['groups'][0]['days'][0]['storePct'],.07)
+        self.assertEqual(p['mismatchCount'],1)
+    def test_adjacent_day_shift_only_warns_and_keeps_both_source_days(self):
+        daily=[DAILY,['9001_Демо','2026-01-05',37,5],['9001_Демо','2026-01-06',42,3]]
+        people=[PEOPLE,['9001_Демо','2026-01-05','1','Первый','Продавец',36,4,4/36],['9001_Демо','2026-01-06','1','Первый','Продавец',43,4,4/43]]
+        data=self.data(daily,people);p=detail_selection(data,self.opts)
+        self.assertEqual(p['mismatchCount'],2)
+        self.assertEqual([(d['orders'],d['late'],d['pct']) for d in p['groups'][0]['days']],[(36,4,4/36),(43,4,4/43)])
+        self.assertEqual((p['orders'],p['late']),(79,8))
+        with tempfile.TemporaryDirectory(dir=TMP) as tmp:
+            audit=generate(data,self.opts,tmp);self.assertEqual(audit['mismatchCount'],2)
+            wb=openpyxl.load_workbook(Path(tmp)/'Отчёт.xlsx');values=[r for r in wb.active.values if isinstance(r[0],dt.datetime)]
+            self.assertEqual([(r[1],r[2],r[3]) for r in values],[(36,4,4/36),(43,4,4/43)])
     def test_maximum_seven_calendar_days_without_silent_truncation(self):
         daily=[DAILY,['9001_Демо','2026-01-05',100,7],['9001_Демо','2026-01-12',100,7]]
         with self.assertRaisesRegex(ValueError,'7 календарных'):detail_selection(self.data(daily),self.opts)

@@ -40,15 +40,15 @@ try:
  assert (folder/'Результаты'/g['run']/'Отчёт.xlsx').is_file()
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  # Collector exports have a different grain from daily store totals.
- detail_files={'stores.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-05',100,5],['9001_Демо','2026-01-06',100,6]]),'collectors.xlsx':bi_export([['Наименование ТТ','date_collected','Номер сборщика','Сборщик','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-06','1','Демо Сборщик',40,6],['9001_Демо','2026-01-06','2','N/A',60,0]])}
+ detail_files={'stores.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-05',100,5],['9001_Демо','2026-01-06',100,6]]),'collectors.xlsx':bi_export([['Наименование ТТ','date_collected','Номер сборщика','Сборщик','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке'],['9001_Демо','2026-01-06','1','Демо Сборщик',40,5],['9001_Демо','2026-01-06','2','N/A',60,0]])}
  boundary=uuid.uuid4().hex;body=b''
  for filename,blob in detail_files.items():body+=f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{filename}"\r\n\r\n'.encode()+blob+b'\r\n'
  body+=f'--{boundary}--\r\n'.encode()
  a=call('/api/analyze',body,'multipart/form-data; boundary='+boundary);assert not a['errors'] and a['collectorCount']==2 and a['dailyCount']==2,a
  payload=json.dumps({'id':a['id'],'options':{'codes':['9001'],'mode':'details','excludeUnknown':True}}).encode()
- preview=call('/api/preview',payload);assert preview['badDays']==1 and preview['collectorCount']==2 and preview['unknownCollectors']==1
+ preview=call('/api/preview',payload);assert preview['badDays']==1 and preview['collectorCount']==2 and preview['unknownCollectors']==1 and preview['mismatchCount']==1 and preview['measureSource']=='collectors'
  assert preview['groups'][0]['days'][0]['date']=='2026-01-06'
- g=call('/api/generate',payload);assert g['audit']['mode']=='details' and g['audit']['orders']==100 and g['audit']['late']==6 and len(g['images'])==1
+ g=call('/api/generate',payload);assert g['audit']['mode']=='details' and g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['storeLate']==6 and g['audit']['mismatchCount']==1 and len(g['images'])==1
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  print('Packaged portable smoke test passed.')
 finally:

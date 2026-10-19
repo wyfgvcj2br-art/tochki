@@ -59,7 +59,7 @@ def analyze(files):
             # BI exports may declare dimension="A1" even when records follow.
             # Stream actual worksheet cells instead of trusting cached bounds.
             sheet.reset_dimensions()
-            rows=sheet.iter_rows(values_only=True); cs=None; kind=None
+            rows=sheet.iter_rows(values_only=True); cs=None; kind=None; date_field=None
             for rn,row in enumerate(rows,1):
                 if cs is None:
                     if rn>40:break
@@ -67,7 +67,7 @@ def analyze(files):
                     if all(candidate[k] is not None for k in ['tt','date','orders','late','name']):cs=candidate;kind='collectors'
                     elif all(candidate[k] is not None for k in ['tt','date','orders','late']):cs=candidate;kind='daily'
                     elif all(candidate[k] is not None for k in ['tt','date','name','count']):cs=candidate;kind='appeals'
-                    if cs is not None:recognized=True;sources.append({'file':filename,'sheet':sheet.title,'kind':kind,'header':rn})
+                    if cs is not None:date_field=str(row[cs['date']]);recognized=True;sources.append({'file':filename,'sheet':sheet.title,'kind':kind,'header':rn,'dateField':date_field})
                     continue
                 if not any(v is not None for v in row):continue
                 get=lambda k:row[cs[k]] if cs.get(k) is not None and cs[k]<len(row) else None
@@ -83,7 +83,7 @@ def analyze(files):
                         pct=get('pct')
                         pct=number(pct) if pct is not None and not(kind=='collectors' and norm(pct) in {'na',''}) else (late/orders if orders else None)
                         if pct is not None and not 0<=pct<=1:raise ValueError('Доля просрока должна быть от 0 до 100%.')
-                        rec={'tt':tt,'code':key[0],'date':day,'orders':orders,'late':late,'pct':pct,'helper':str(get('helper') or '').strip(),'source':f'{filename} / {sheet.title}, строка {rn}'}
+                        rec={'tt':tt,'code':key[0],'date':day,'dateField':date_field,'orders':orders,'late':late,'pct':pct,'helper':str(get('helper') or '').strip(),'source':f'{filename} / {sheet.title}, строка {rn}'}
                         if kind=='collectors':
                             if pct is not None and (not orders or not math.isclose(pct,late/orders,rel_tol=1e-9,abs_tol=1e-12)):
                                 if orders or late or pct:raise ValueError('Доля просрока сборщика не совпадает с просроченными / успешными заказами.')
