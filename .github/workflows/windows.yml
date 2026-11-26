@@ -43,8 +43,31 @@ jobs:
         run: ./scripts/smoke_installer.ps1 -EnvironmentOnly
       - name: Run regression, path and migration tests
         run: python -m unittest discover -s tests -v
+      - name: Restore immutable installer build cache
+        id: installer-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            dist/installed
+            dist/*Setup-x64.exe
+            dist/SHA256SUMS.txt
+            dist/installer-build.json
+            .cache/tools
+          key: windows-x64-installer-${{ hashFiles('app/**', 'installer/**', 'scripts/build_*', 'scripts/windows_metadata.py', 'requirements*.txt', 'VERSION', 'INSTALLATION.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/windows.yml') }}
       - name: Build offline Windows installer
+        if: steps.installer-cache.outputs.cache-hit != 'true'
         run: python scripts/build_installer.py --accept-runtime-license
+      - name: Save immutable installer build cache
+        if: steps.installer-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            dist/installed
+            dist/*Setup-x64.exe
+            dist/SHA256SUMS.txt
+            dist/installer-build.json
+            .cache/tools
+          key: ${{ steps.installer-cache.outputs.cache-primary-key }}
       - name: Validate install, standard user, upgrade, uninstall and reinstall
         shell: pwsh
         run: ./scripts/smoke_installer.ps1
