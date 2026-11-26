@@ -39,7 +39,7 @@ class DesktopAPI:
         import server,webview
         try:
             current=server.RESULTS
-            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER,directory=str(current if current.is_dir() else PATHS.reports.parent))
+            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER,directory=str(current if current.is_dir() else (PATHS.reports.parents[1] if PATHS.mode=='installed' else APP)))
             if not chosen:return {'cancelled':True,'path':str(current)}
             path=check_folder(chosen[0])
             self._save('outputFolder',result_setting(current_paths(),path))

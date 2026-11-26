@@ -15,7 +15,7 @@ from settings_store import read_settings,save_settings,atomic_write
 class InstallationPathsTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.root=Path(self.temp.name)
+        self.root=Path(self.temp.name).resolve()
         self.app=self.root/'Program Files'/'Точки с пробелами';self.app.mkdir(parents=True)
         self.local=self.root/'Перенаправленный профиль'/'Local'
         self.documents=self.root/'Другая папка документов'
@@ -56,7 +56,7 @@ class InstallationPathsTests(unittest.TestCase):
 class MigrationTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.root=Path(self.temp.name)
+        self.root=Path(self.temp.name).resolve()
         self.source=self.root/'Старая Portable';self.old=self.source/'Data';self.old.mkdir(parents=True)
         self.target=self.root/'Профиль'/'Data';self.target.mkdir(parents=True)
         self.names=json.dumps({'version':1,'entries':{'42':{'name':'Иванов Иван','tts':['9001']}}},ensure_ascii=False).encode()
@@ -132,6 +132,13 @@ class MigrationTests(unittest.TestCase):
         (self.old/'WebView').mkdir();(self.old/'Ошибка.txt').write_text('old diagnostic')
         (self.old/'desktop-state.json').write_text('{"pid":123}')
         self.assertEqual({x['name'] for x in self.plan()['files']},{'settings.json','collector-names.json','collector-names.json.bak'})
+    def test_bom_directory_is_normalized_for_runtime_reader(self):
+        from collector_names import NameDirectory
+        for name in ('collector-names.json','collector-names.json.bak'):
+            (self.old/name).write_bytes(b'\xef\xbb\xbf'+self.names)
+        import_data(self.plan(),self.target)
+        self.assertEqual(NameDirectory(self.target).read()['entries']['42']['name'],'Иванов Иван')
+        self.assertFalse((self.target/'collector-names.json.bak').read_bytes().startswith(b'\xef\xbb\xbf'))
     def test_corrupt_settings_remain_intact(self):
         file=self.target/'settings.json';file.write_bytes(b'invalid')
         with self.assertRaises(ValueError):read_settings(file)

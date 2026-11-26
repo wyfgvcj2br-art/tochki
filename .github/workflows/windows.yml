@@ -58,9 +58,12 @@ jobs:
             dist/*Setup-x64.exe
             dist/SHA256SUMS.txt
             dist/installer-build.json
-            .cache/validation/
+            .cache/validation/*.json
+            .cache/validation/*.log
+            .cache/validation/*.txt
           if-no-files-found: error
           compression-level: 0
+          include-hidden-files: true
       - name: Upload optional portable archive
         uses: actions/upload-artifact@v4
         with:
