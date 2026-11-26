@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-FOLDERS = {'local': 'F1B32785-6FBA-4FCF-9D55-7B8E7F157091',
+FOLDERS = {'fonts': 'FD228CB7-AE11-4AE3-864C-16F3910AB8FE', 'local': 'F1B32785-6FBA-4FCF-9D55-7B8E7F157091',
            'documents': 'FDD39AD0-238F-46AF-ADB4-6C85480369C7'}
 
 def known_folder(name):

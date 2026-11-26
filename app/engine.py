@@ -155,7 +155,8 @@ def select(data,opts):
     return groups,sorted(dates),apps
 
 def font(size=20,bold=False):
-    path=Path('C:/Windows/Fonts')/('arialbd.ttf' if bold else 'arial.ttf')
+    from app_paths import known_folder
+    path=known_folder('fonts')/('arialbd.ttf' if bold else 'arial.ttf')
     if not path.exists():raise ValueError('Для изображений нужен установленный шрифт Arial.')
     return ImageFont.truetype(str(path),size)
 def color(v,good,bad):return '#'+(GREEN if v is not None and v<=good else RED if v is not None and v>bad else LIGHT_RED) if v is not None else '#EDF2F6'
