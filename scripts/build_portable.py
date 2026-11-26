@@ -12,7 +12,7 @@ def digest(path):
         for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
     return h.hexdigest()
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--runtime-cab',type=Path);parser.add_argument('--accept-runtime-license',action='store_true');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("--format",choices=["portable","installed"],default="portable");parser.add_argument('--runtime-cab',type=Path);parser.add_argument('--accept-runtime-license',action='store_true');parser.add_argument('--output',type=Path,default=ROOT/'dist');args=parser.parse_args()
     if os.name!='nt':raise SystemExit('Сборка EXE выполняется на Windows.')
     if not args.accept_runtime_license:raise SystemExit('Прочтите licenses/WEBVIEW2-LICENSE.txt и передайте --accept-runtime-license для включения Runtime.')
     cache=ROOT/'.cache';cache.mkdir(exist_ok=True);cab=args.runtime_cab or cache/f'WebView2-{RUNTIME_VERSION}-x64.cab'
@@ -20,9 +20,13 @@ def main():
         print('Downloading official Microsoft Fixed Version Runtime...',flush=True)
         urllib.request.urlretrieve(RUNTIME_URL,cab)
     if digest(cab)!=RUNTIME_SHA256:raise SystemExit('Контрольная сумма WebView2 не совпала. Сборка остановлена.')
-    app=ROOT/'app';out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
+    app=ROOT/'app';out=args.output.resolve()/args.format;out.mkdir(parents=True,exist_ok=True)
+    work=ROOT/'build'/args.format;work.mkdir(parents=True,exist_ok=True)
+    version=(ROOT/'VERSION').read_text().strip()
+    from windows_metadata import write_metadata
+    metadata,manifest=write_metadata(ROOT,work,version)
     import PyInstaller.__main__
-    argv=[str(app/'desktop.py'),'--name','Точки','--onedir','--windowed','--noconfirm','--distpath',str(out),'--workpath',str(ROOT/'build'),'--specpath',str(ROOT/'build'),'--paths',str(app),'--add-data',str(app/'ui')+os.pathsep+'ui','--add-data',str(app/'Точки.ico')+os.pathsep+'.','--icon',str(app/'Точки.ico'),'--collect-all','webview','--collect-all','clr_loader','--collect-all','pythonnet']
+    argv=[str(app/'desktop.py'),'--name','Точки','--onedir','--windowed','--noconfirm','--distpath',str(out),'--workpath',str(work),'--specpath',str(ROOT/'build'),'--paths',str(app),'--add-data',str(app/'ui')+os.pathsep+'ui','--add-data',str(app/'Точки.ico')+os.pathsep+'.','--icon',str(app/'Точки.ico'),'--version-file',str(metadata),'--manifest',str(manifest),'--add-data',str(ROOT/'VERSION')+os.pathsep+'.','--collect-all','webview','--collect-all','clr_loader','--collect-all','pythonnet']
     for name in ['numpy','pandas','scipy','matplotlib','IPython','PyQt5','PyQt6','PySide6','PySide2','webview.platforms.qt','webview.platforms.gtk','webview.platforms.cocoa','webview.platforms.android','webview.platforms.cef','tkinter']:argv+=['--exclude-module',name]
     PyInstaller.__main__.run(argv)
     folder=out/'Точки';runtime=folder/'WebView2';runtime.mkdir(exist_ok=True)
@@ -49,8 +53,15 @@ def main():
     python_license=Path(sys.base_prefix)/'LICENSE.txt'
     if python_license.is_file():shutil.copy2(python_license,folder/'licenses/PYTHON-LICENSE.txt')
     shutil.copy2(ROOT/'PORTABLE.txt',folder/'Прочитать.txt')
-    for name in ['Data','Результаты']:(folder/name).mkdir(exist_ok=True)
+    if args.format=='portable':
+        for name in ['Data','Результаты']:(folder/name).mkdir(exist_ok=True)
     version=(ROOT/'VERSION').read_text().strip();manifest={'version':version,'platform':'windows-x64','distribution':'portable-folder','runtime':RUNTIME_VERSION,'runtime_cab_sha256':RUNTIME_SHA256,'settings':'Data/settings.json','collectorNames':'Data/collector-names.json','results':'Результаты','producer':'Saudade_meow'}
+    if args.format=='installed':
+        manifest.update(distribution='installed',settings='KnownFolder:LocalAppData/Tochki/Data',results='KnownFolder:Documents/Точки/Результаты')
+        (folder/'distribution.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+        shutil.copy2(ROOT/'INSTALLATION.md',folder/'Прочитать.txt')
+        print('Installed payload ready:',folder,flush=True)
+        return
     (folder/'portable.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     archive=out/f'Tochki-Portable-{version}-win-x64.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:

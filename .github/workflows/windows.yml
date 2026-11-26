@@ -1,0 +1,61 @@
+name: Build Windows installer and portable
+on:
+  push:
+    branches: [main, feature/windows-installer]
+    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', '*.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/**']
+  pull_request:
+    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', '*.md', '.github/workflows/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 40
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.16'
+          architecture: x64
+          cache: pip
+      - name: Install pinned dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Record build environment
+        run: |
+          New-Item -ItemType Directory -Force .cache/validation | Out-Null
+          python -m pip freeze | Out-File -Encoding utf8 .cache/validation/dependencies.txt
+          Get-ComputerInfo -Property WindowsProductName,WindowsVersion,OsBuildNumber | ConvertTo-Json | Out-File -Encoding utf8 .cache/validation/windows.json
+      - name: Run regression, path and migration tests
+        run: python -m unittest discover -s tests -v
+      - name: Build offline Windows installer
+        run: python scripts/build_installer.py --accept-runtime-license
+      - name: Validate install, standard user, upgrade, uninstall and reinstall
+        shell: pwsh
+        run: ./scripts/smoke_installer.ps1
+      - name: Build optional portable distribution
+        run: python scripts/build_portable.py --accept-runtime-license
+      - name: Validate packaged portable
+        run: python scripts/smoke_portable.py dist/portable/Точки
+      - name: Upload installer and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tochki-2.6.0-Windows-installer
+          path: |
+            dist/*Setup-x64.exe
+            dist/SHA256SUMS.txt
+            dist/installer-build.json
+            .cache/validation/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload optional portable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tochki-2.6.0-Portable
+          path: |
+            dist/portable/*.zip
+            dist/portable/SHA256SUMS.txt
+          compression-level: 0
