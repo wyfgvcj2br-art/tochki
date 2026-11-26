@@ -8,15 +8,14 @@ jobs:
   logo:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install cairosvg
-      - name: Prepare official monogram
+      - name: Rasterize monogram for Pillow
         shell: python
         run: |
-          import urllib.request, base64, cairosvg
-          source = urllib.request.urlopen('https://vkusvill.ru/brand/img/monogram-logo.svg?v=1', timeout=30).read()
-          print('SVG_SOURCE=' + source.decode())
-          png = cairosvg.svg2png(bytestring=source, output_width=320)
+          import base64, cairosvg
+          png = cairosvg.svg2png(url='app/ui/vv-monogram.svg', output_width=368, output_height=208)
           print('LOGO_PNG=' + base64.b64encode(png).decode())
