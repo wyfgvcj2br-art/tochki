@@ -26,13 +26,13 @@ if args.installed and not args.reuse:
  assert len(imported['files'])==3
  assert before=={p.name:p.read_bytes() for p in (source/'Data').iterdir()},'Portable source was modified'
  assert (locations.data/'collector-names.json.bak').is_file()
- assert json.loads(settingsfile.read_text())['theme']=='light'
+ assert json.loads(settingsfile.read_text(encoding='utf-8'))['theme']=='light'
 
 if not args.installed:
  assert not settingsfile.exists(),'Smoke test requires a fresh build folder.'
  save_settings(settingsfile,{'outputFolder':{'path':'Smoke reports','relative':True}})
 elif args.reuse:
- assert settingsfile.is_file() and json.loads(settingsfile.read_text())['theme']=='light','Settings did not survive upgrade/reinstall'
+ assert settingsfile.is_file() and json.loads(settingsfile.read_text(encoding='utf-8'))['theme']=='light','Settings did not survive upgrade/reinstall'
  assert (locations.data/'survival.txt').read_text(encoding='utf-8')=='сохранить'
  assert (output/'survival.txt').read_text(encoding='utf-8')=='сохранить'
 
@@ -85,13 +85,13 @@ try:
  statefile=(locations.logs if args.installed else locations.data)/'desktop-state.json'
  for _ in range(90):
   try:
-   state=json.loads(statefile.read_text())
+   state=json.loads(statefile.read_text(encoding='utf-8'))
    if state.get('pid')==proc.pid and state.get('ready'):break
   except (OSError,ValueError):pass
   if proc.poll() is not None:raise RuntimeError('EXE завершился при запуске')
   time.sleep(1)
  else:raise RuntimeError('Окно встроенного WebView2 не загрузилось за 90 секунд')
- state=json.loads(statefile.read_text());assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']==('installed' if args.installed else 'portable');url=state['url']
+ state=json.loads(statefile.read_text(encoding='utf-8'));assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']==('installed' if args.installed else 'portable');url=state['url']
  assert Path(state['data'])==locations.data and Path(state['webview'])==locations.webview
  assert state.get('smartScreen') is False,'Local WebView SmartScreen setting was not applied'
  boundary=uuid.uuid4().hex;body=b''
@@ -134,7 +134,7 @@ try:
  proc=subprocess.Popen([str(folder/'Точки.exe')],cwd=Path(os.environ['SystemRoot']),env=launch_env)
  for _ in range(90):
   try:
-   state=json.loads(statefile.read_text())
+   state=json.loads(statefile.read_text(encoding='utf-8'))
    if state.get('pid')==proc.pid and state.get('ready'):break
   except (OSError,ValueError):pass
   if proc.poll() is not None:raise RuntimeError('EXE завершился при повторном запуске')
@@ -150,14 +150,14 @@ try:
  if args.installed:
   (locations.data/'survival.txt').write_text('сохранить',encoding='utf-8')
   (output/'survival.txt').write_text('сохранить',encoding='utf-8')
-  assert json.loads(settingsfile.read_text())['theme']=='light'
+  assert json.loads(settingsfile.read_text(encoding='utf-8'))['theme']=='light'
  close_app(proc,state)
  if args.shortcut:
   statefile.unlink(missing_ok=True)
   os.startfile(args.shortcut)
   for _ in range(90):
    try:
-    shortcut_state=json.loads(statefile.read_text())
+    shortcut_state=json.loads(statefile.read_text(encoding='utf-8'))
     if shortcut_state.get('ready'):break
    except (OSError,ValueError):pass
    time.sleep(1)
