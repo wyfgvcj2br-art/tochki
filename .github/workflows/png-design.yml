@@ -2,20 +2,31 @@ name: PNG design checks
 on:
   push:
     branches: [design/vkusvill-png]
+  pull_request:
+    paths: ['app/**', 'scripts/preview_png.py', 'tests/**', 'requirements*.txt', '.github/workflows/png-design.yml']
 permissions:
   contents: read
 jobs:
-  logo:
-    runs-on: ubuntu-latest
+  png:
+    runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install cairosvg
-      - name: Rasterize monogram for Pillow
-        shell: python
-        run: |
-          import base64, cairosvg
-          png = cairosvg.svg2png(url='app/ui/vv-monogram.svg', output_width=368, output_height=208)
-          print('LOGO_PNG=' + base64.b64encode(png).decode())
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check calculations and PNG exports
+        run: python -m unittest discover -s tests -v
+      - name: Render synthetic PNG examples
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/preview_png.py .cache/png-previews --inline
+      - name: Upload PNG examples
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tochki-VkusVill-PNG-examples
+          path: .cache/png-previews/*.png
+          if-no-files-found: error

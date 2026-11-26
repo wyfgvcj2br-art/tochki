@@ -94,26 +94,14 @@ def detail_rows(group):
 
 
 def detail_picture(group,dates,path):
-    rows=detail_rows(group);width=1500;edges=(0,820,1040,1260,1500);header=193;rh=50
-    im=Image.new('RGB',(width,header+rh*len(rows)),'white');draw=ImageDraw.Draw(im)
-    draw.text((20,16),group['tt'],font=font(30,True),fill='#243E52')
-    draw.text((20,62),f'{dt.date.fromisoformat(dates[0]):%d.%m.%Y} — {dt.date.fromisoformat(dates[-1]):%d.%m.%Y}',font=font(20),fill='#607484')
-    draw.text((20,96),f'Детализация сборщиков · просрок ТТ ≥ 6% · дней: {len(group["days"])}',font=font(20),fill='#607484')
-    draw.rectangle((0,133,width,header),fill='#'+BLUE)
-    for i,label in enumerate(('Дата / Сборщик','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок')):
-        draw.text(((edges[i]+edges[i+1])/2,163),label,font=font(20,True),fill='white',anchor='mm')
-    for j,(values,ratio,kind) in enumerate(rows):
-        y=header+j*rh;bold=kind!='person';fill='#DCE6ED' if bold else ('white' if j%2 else '#F7FAFC')
-        draw.rectangle((0,y,width,y+rh),fill=fill)
-        draw.rectangle((1260,y,width,y+rh),fill=detail_color(ratio))
-        for col,value in enumerate(values):
-            face=font(21,bold or col==3)
-            if col==0:
-                while draw.textlength(value,font=face)>775 and face.size>14:face=font(face.size-1,bold)
-                draw.text((20,y+25),value,font=face,fill='#243D50',anchor='lm')
-            else:draw.text(((edges[col]+edges[col+1])/2,y+25),value,font=face,fill='#243D50',anchor='mm')
-        draw.line((0,y+rh-1,width,y+rh-1),fill='#DCE4EA')
-    im.save(path)
+    from report_style import report_picture
+    report_picture(
+        group['tt'],dates,path,
+        ['Дата / Сборщик','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок'],
+        detail_rows(group),[32,820,1040,1260,1468],font,
+        report_name='Детализация сборщиков',
+        subtitle=f'Просрок ТТ ≥ 6% · дней: {len(group["days"])}',
+        rate_column=3,rate_color=detail_color)
 
 
 def generate_details(data,opts,folder):
