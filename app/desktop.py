@@ -14,7 +14,7 @@ def current_paths():
     return dataclasses.replace(PATHS,app=APP,data=DATA)
 
 class DesktopAPI:
-    def __init__(self):self._window=None;self._expanded=False
+    def __init__(self):self._window=None;self._expanded=False;self._migration_review=None;self._migration_token=None
     def minimize(self):self._window.minimize()
     def maximize(self):
         if self._expanded:self._window.restore()
@@ -54,6 +54,44 @@ class DesktopAPI:
             os.startfile(path)
             return {'ok':True}
         except (ValueError,OSError) as error:return {'error':str(error)}
+
+    def get_migration_status(self):
+        from portable_migration import migration_status
+        return {'available':PATHS.mode=='installed',**(migration_status(DATA) if PATHS.mode=='installed' else {'pending':False})}
+    def choose_portable_folder(self):
+        import webview
+        from portable_migration import preview_import
+        try:
+            if PATHS.mode!='installed':raise ValueError('Импорт доступен в установленной версии.')
+            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER)
+            if not chosen:return {'cancelled':True}
+            with settings_lock:
+                review=preview_import(chosen[0],DATA)
+                import secrets
+                self._migration_review=review;self._migration_token=secrets.token_hex(24)
+            return {'token':self._migration_token,'source':review['source'],'files':review['files']}
+        except (ValueError,OSError) as error:return {'error':str(error)}
+    def import_portable(self,token):
+        from portable_migration import import_data
+        try:
+            with settings_lock:
+                if PATHS.mode!='installed' or not self._migration_review or token!=self._migration_token:
+                    raise ValueError('Сначала выберите и проверьте папку Portable.')
+                replace=any(item['replace'] for item in self._migration_review['files'])
+                if replace and not self._window.create_confirmation_dialog(
+                        'Заменить данные «Точки»?',
+                        'В установленной версии уже есть настройки или справочник. Заменить их данными Portable? Текущие файлы будут сохранены в Data/Backups.'):
+                    return {'cancelled':True}
+                result=import_data(self._migration_review,DATA,confirm_replace=replace)
+                self._migration_review=None;self._migration_token=None
+                import server
+                server.RESULTS=result_folder(current_paths(),self.load_settings().get('outputFolder'))
+                return result
+        except (ValueError,OSError) as error:return {'error':str(error)}
+    def skip_migration(self):
+        from portable_migration import skip_import
+        if PATHS.mode!='installed':return {'ok':True}
+        with settings_lock:return skip_import(DATA)
 
 def configure_windows():
     try:
