@@ -1,0 +1,22 @@
+name: PNG design checks
+on:
+  push:
+    branches: [design/vkusvill-png]
+permissions:
+  contents: read
+jobs:
+  logo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install cairosvg
+      - name: Prepare official monogram
+        shell: python
+        run: |
+          import urllib.request, base64, cairosvg
+          source = urllib.request.urlopen('https://vkusvill.ru/brand/img/monogram-logo.svg?v=1', timeout=30).read()
+          print('SVG_SOURCE=' + source.decode())
+          png = cairosvg.svg2png(bytestring=source, output_width=320)
+          print('LOGO_PNG=' + base64.b64encode(png).decode())
