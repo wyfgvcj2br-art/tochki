@@ -74,7 +74,7 @@ def preview_import(portable,data):
                 normalized=json.dumps(settings,ensure_ascii=False,indent=2).encode('utf-8')
             else:
                 validate_names(blob)
-                normalized=blob
+                normalized=blob.removeprefix(b'\xef\xbb\xbf')
         except (ValueError,KeyError,TypeError,UnicodeError) as error:
             raise ValueError(f'Импорт остановлен: неверный файл {name}. {error}') from error
         current=read_file(target/name)
@@ -116,7 +116,11 @@ def import_data(review,data,confirm_replace=False):
                     if settings.get('outputFolder'):
                         settings['outputFolder']={'path':str(resolve_folder(fresh['source'],settings['outputFolder'])),'relative':False}
                     blob=json.dumps(settings,ensure_ascii=False,indent=2).encode('utf-8')
-                else:validate_names(blob)
+                else:
+                    validate_names(blob)
+                    blob=blob.removeprefix(b'\xef\xbb\xbf')
+                if digest(read_file(target/name))!=fresh['targetHashes'][name]:
+                    raise ValueError('Пользовательские данные изменились во время импорта.')
                 atomic_write(target/name,blob)
                 written.append(name)
             atomic_write(marker,json.dumps({'version':1,'status':'imported',
