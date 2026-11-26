@@ -1,0 +1,114 @@
+name: Publish verified 2.6.0 release
+on:
+  push:
+    branches: [feature/windows-installer]
+    paths: ['.github/workflows/publish-2.6.0.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-tochki-2.6.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: a066fb473a5b5c40d82b6c3002b4a2572204738e
+      BUILD_RUN: '45868499268'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a066fb473a5b5c40d82b6c3002b4a2572204738e
+      - name: Wait for all required build and installation checks
+        run: gh run watch "$BUILD_RUN" --exit-status --interval 20
+      - name: Download, verify and publish existing tested binaries
+        shell: python
+        run: |
+          import hashlib, json, os, pathlib, re, shutil, subprocess
+          repo, source, run = (os.environ[k] for k in ("GH_REPO", "SOURCE_SHA", "BUILD_RUN"))
+          def gh(*args):
+              return subprocess.check_output(["gh", *args], text=True)
+          build = json.loads(gh("api", f"repos/{repo}/actions/runs/{run}"))
+          assert build["conclusion"] == "success", build
+          assert build["head_sha"] == source, build["head_sha"]
+          assert build["head_branch"] == "feature/windows-installer"
+          assert build["path"] == ".github/workflows/windows.yml"
+          root = pathlib.Path(".cache/release-2.6.0")
+          stage = root / "assets"
+          stage.mkdir(parents=True)
+          for name, folder in (("Tochki-2.6.0-Windows-installer", "installer"), ("Tochki-2.6.0-Portable", "portable")):
+              gh("run", "download", run, "--repo", repo, "--name", name, "--dir", str(root / folder))
+          def unique(folder, name):
+              matches = list((root / folder).rglob(name))
+              assert len(matches) == 1, (name, matches)
+              return matches[0]
+          exe = unique("installer", "Tochki-2.6.0-Setup-x64.exe")
+          portable = unique("portable", "Tochki-Portable-2.6.0-win-x64.zip")
+          checksums = []
+          for folder, payload in (("installer", exe), ("portable", portable)):
+              recorded = unique(folder, "SHA256SUMS.txt").read_text(encoding="utf-8-sig")
+              digest = hashlib.file_digest(payload.open("rb"), "sha256").hexdigest()
+              assert any(line.split()[0].lower() == digest and line.rstrip().endswith(payload.name) for line in recorded.splitlines() if line.strip()), recorded
+              shutil.copy2(payload, stage / payload.name)
+              checksums.append(f"{digest}  {payload.name}")
+          logs = gh("run", "view", run, "--repo", repo, "--log")
+          validated = re.findall(r"VALIDATED_INSTALLER_SHA256=([a-fA-F0-9]{64})", logs)
+          assert validated and set(v.lower() for v in validated) == {checksums[0].split()[0]}, validated
+          (stage / "SHA256SUMS.txt").write_text("\n".join(checksums) + "\n", encoding="utf-8")
+          for document in ("INSTALLATION.md", "VALIDATION_REPORT.md"):
+              shutil.copy2(document, stage / document)
+          shutil.copy2(unique("installer", "installer-build.json"), stage / "installer-build.json")
+          evidence = {
+              "source_sha": source, "build_run": int(run),
+              "build_url": build["html_url"], "sha256": checksums,
+              "published_without_merging_main": True,
+              "validation_limits": [
+                  "Automation ran on Windows Server 2025, not Windows 10/11 client.",
+                  "Windows 10/11 clean-machine, interactive dialogs and DPI 100/125/150/200 manual checks remain unperformed.",
+                  "The runner host contains Python; the application was tested with Python removed from its PATH."
+              ]
+          }
+          (stage / "release-validation.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          notes = pathlib.Path("RELEASE_NOTES.md").read_text(encoding="utf-8")
+          notes += f"""
+          
+          ## Скачать и установить
+          
+          Основной файл: **Tochki-2.6.0-Setup-x64.exe**. Запустите EXE и следуйте русскоязычному мастеру. Python и Fixed Version WebView2 включены.
+          ZIP Portable — дополнительный формат. Контрольные суммы обоих файлов находятся в SHA256SUMS.txt.
+          
+          ## Фактическая проверка этого релиза
+          
+          [Успешная сборка и все автоматические проверки]({build['html_url']}) для коммита {source}.
+          Проверены 62 теста, чистая установка, обычный пользователь с кириллическим профилем, отчёты XLSX/PNG, сохранение данных, обновление, удаление и повторная установка, запуск через ярлык и завершение процессов.
+          
+          Автоматизация выполнена на **Windows Server 2025 x64**. Ручные проверки на клиентских Windows 10/11, полностью чистой ОС без Python, интерактивных диалогов и DPI 100/125/150/200 **не проводились**. На CI приложение запускалось без Python в PATH, с запретом внешней сети для приложения и WebView2. Полная матрица и ограничения приведены в приложенном VALIDATION_REPORT.md; контрольная сумма актуального опубликованного EXE и ссылка на его прогон — в release-validation.json и SHA256SUMS.txt.
+          
+          Версия опубликована из feature/windows-installer; main не объединялась с этой веткой.
+          
+          SHA-256 установщика: `{checksums[0].split()[0]}`.
+          """
+          notes_path = root / "notes.md"
+          notes_path.write_text(notes, encoding="utf-8")
+          releases = json.loads(gh("api", f"repos/{repo}/releases?per_page=100"))
+          assert not any(r["tag_name"] == "v2.6.0" for r in releases), "Release already exists; refusing to replace it"
+          existing_tag = subprocess.run(["gh", "api", f"repos/{repo}/git/ref/tags/v2.6.0"], capture_output=True, text=True)
+          if existing_tag.returncode == 0:
+              assert json.loads(existing_tag.stdout)["object"]["sha"] == source, existing_tag.stdout
+          else:
+              gh("api", "--method", "POST", f"repos/{repo}/git/refs", "-f", "ref=refs/tags/v2.6.0", "-f", f"sha={source}")
+          gh("release", "create", "v2.6.0", "--repo", repo, "--target", source,
+             "--title", "ТОЧКИ 2.6.0 · Windows x64", "--notes-file", str(notes_path),
+             "--draft", *[str(p) for p in sorted(stage.iterdir())])
+          # Verify uploaded bytes before making the release public.
+          verify = root / "verify"
+          gh("release", "download", "v2.6.0", "--repo", repo, "--dir", str(verify))
+          for asset in stage.iterdir():
+              assert hashlib.file_digest(asset.open("rb"), "sha256").digest() == hashlib.file_digest((verify / asset.name).open("rb"), "sha256").digest(), asset.name
+          tag = json.loads(gh("api", f"repos/{repo}/git/ref/tags/v2.6.0"))
+          assert tag["object"]["sha"] == source, tag
+          gh("release", "edit", "v2.6.0", "--repo", repo, "--draft=false", "--latest")
+          print(gh("release", "view", "v2.6.0", "--repo", repo, "--json", "url,isDraft,tagName,assets"))
