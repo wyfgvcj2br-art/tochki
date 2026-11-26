@@ -16,3 +16,5 @@ body[data-theme=dark]{color-scheme:dark;background:#090F18;color:#D3DFE9;backgro
 @media(max-width:900px){.sidebar{width:200px;flex-shrink:0}.layout{grid-template-columns:1fr}.settings{position:static}.content{padding:20px}.native-titlebar{min-height:34px}}
 
 body[data-theme=dark] #migration-dialog{background:#0C1825;border-color:#2B465B;color:#C0D9E8}
+
+.folder-actions{flex-wrap:wrap}

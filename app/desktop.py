@@ -153,6 +153,16 @@ def main():
         window=webview.create_window('Точки · Prod. by Saudade_meow',url=url,js_api=api,width=1380,height=920,min_size=(720,520),frameless=True,easy_drag=False,shadow=True,background_color='#090F18',text_select=True)
         api._window=window
         def loaded():
+            # This WebView renders only local application content. Apply native
+            # settings on the WinForms UI thread; never change system Edge policy.
+            from System import Action
+            def browser_options():
+                settings=window.native.webview.CoreWebView2.Settings
+                settings.IsReputationCheckingRequired=False
+                settings.IsGeneralAutofillEnabled=False
+                settings.IsPasswordAutosaveEnabled=False
+                state['smartScreen']=bool(settings.IsReputationCheckingRequired)
+            window.native.Invoke(Action(browser_options))
             state['ready']=True
             try:state['hwnd']=int(window.native.Handle.ToInt64())
             except (AttributeError,TypeError):pass

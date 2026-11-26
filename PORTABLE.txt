@@ -42,8 +42,9 @@ Data/WebView — профиль встроенного окна.
 WebView2 распространяется по отдельным условиям в licenses/WEBVIEW2-LICENSE.txt.
 Использование встроенного WebView2 означает принятие этих условий.
 Распространять его отдельно от этого приложения не разрешается.
-Встроенный Microsoft Defender SmartScreen может собирать и передавать Microsoft
-информацию конечного пользователя в соответствии с политикой Microsoft:
+Для локального WebView приложения Microsoft Defender SmartScreen отключён через
+CoreWebView2Settings.IsReputationCheckingRequired. Системные настройки Edge не меняются.
+Лицензионные сведения Microsoft о конфиденциальности:
 https://aka.ms/privacy
 https://learn.microsoft.com/en-us/microsoft-edge/privacy-whitepaper#smartscreen
 Само приложение не загружает исходные XLSX на внешние серверы.

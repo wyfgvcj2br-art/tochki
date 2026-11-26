@@ -90,6 +90,7 @@ try:
  else:raise RuntimeError('Окно встроенного WebView2 не загрузилось за 90 секунд')
  state=json.loads(statefile.read_text());assert Path(state['app']).resolve()==folder;assert Path(state['runtime']).is_relative_to(folder/'WebView2');assert state['mode']==('installed' if args.installed else 'portable');url=state['url']
  assert Path(state['data'])==locations.data and Path(state['webview'])==locations.webview
+ assert state.get('smartScreen') is False,'Local WebView SmartScreen setting was not applied'
  boundary=uuid.uuid4().hex;body=b''
  files={'daily.xlsx':upload_bytes([['Наименование ТТ','Дата','Заказы в статусе Успешно завершен','Общее кол-во заказов, просроченных по сборке','Помощник'],['9001_Демо','2026-01-05',100,5,'Демо']]),'appeals.xlsx':bi_export([['Примененные фильтры: контрольный экспорт'],[],['Сборщик','ТТ','абс','Дни'],['Тестовый Сотрудник(123)','9001_Демо',1,'2026-01-05'],['Ранее(456)','9001_Демо',2,'2025-07-17'],['Позже(789)','9001_Демо',3,'2026-01-06']])}
  for filename,blob in files.items():body+=f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{filename}"\r\n\r\n'.encode()+blob+b'\r\n'

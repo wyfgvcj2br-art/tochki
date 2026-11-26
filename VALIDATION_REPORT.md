@@ -65,6 +65,8 @@ Manifest объявляет asInvoker, PerMonitorV2 и longPathAware, minimum wi
 поиск Arial: Known Folder Fonts вместо фиксированного C:/Windows/Fonts.
 Нет автозагрузки, служб, телеметрии или отправки XLSX. Локальные HTTP-запросы
 используют 127.0.0.1. Фоновые службы браузера отключены, нелокальные запросы runtime
-направляются на локальный неиспользуемый proxy; тест дополнительно блокирует egress.
+направляются на локальный неиспользуемый proxy; SmartScreen локального WebView отключён
+через CoreWebView2Settings.IsReputationCheckingRequired. Пакетный smoke проверяет
+фактическое значение настройки; тест дополнительно блокирует egress.
 
 Окончательная публикация и merge в main не входят в автоматический workflow.
