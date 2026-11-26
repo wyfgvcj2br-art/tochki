@@ -85,6 +85,7 @@ try {
     Invoke-User 'reuse' 'standard-user-upgraded'
     Invoke-Setup (Join-Path $installFolder 'unins000.exe') 'uninstall'
     if (Test-Path -LiteralPath $uninstallKey) { throw 'Uninstall registration remains.' }
+    if (Test-Path -LiteralPath (Join-Path $installFolder 'Точки.exe')) { throw 'Application EXE remains after uninstall.' }
     if (Test-Path -LiteralPath $shortcut) { throw 'Start menu shortcut remains.' }
     Invoke-User 'preserved' 'data-after-uninstall'
     Invoke-Setup $setup 'reinstall' @('/TASKS=desktopicon')

@@ -8,7 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from app_paths import paths
 locations=paths(app=Path(sys.argv[1]),mode='installed')
 assert json.loads((locations.data/'settings.json').read_text(encoding='utf-8'))['theme']=='light'
-assert (locations.data/'collector-names.json').is_file()
+assert json.loads((locations.data/'collector-names.json').read_text(encoding='utf-8'))['entries']['999']['name']=='Постоянный Сборщик'
 assert (locations.data/'collector-names.json.bak').is_file()
 assert (locations.data/'survival.txt').read_text(encoding='utf-8')=='сохранить'
 assert (locations.reports.parent/'Проверка отчётов с пробелами/survival.txt').read_text(encoding='utf-8')=='сохранить'

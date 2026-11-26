@@ -35,6 +35,7 @@ elif args.reuse:
  assert settingsfile.is_file() and json.loads(settingsfile.read_text(encoding='utf-8'))['theme']=='light','Settings did not survive upgrade/reinstall'
  assert (locations.data/'survival.txt').read_text(encoding='utf-8')=='сохранить'
  assert (output/'survival.txt').read_text(encoding='utf-8')=='сохранить'
+ assert json.loads((locations.data/'collector-names.json').read_text(encoding='utf-8'))['entries']['999']['name']=='Постоянный Сборщик'
 
 launch_env=os.environ.copy()
 launch_env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')+os.pathsep+os.environ['SystemRoot']
@@ -75,7 +76,8 @@ def close_app(process,state):
  hwnd=state.get('hwnd');assert hwnd,'No native window handle was recorded'
  user=ctypes.WinDLL('user32');user.PostMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t]
  assert user.PostMessageW(hwnd,0x10,0,0)
- process.wait(timeout=25)
+ exit_code=process.wait(timeout=25)
+ assert exit_code in (None,0),'Application exited abnormally on window close: '+str(exit_code)
  for _ in range(30):
   if not any(process_alive(pid) for pid in children):break
   time.sleep(.5)
@@ -123,7 +125,12 @@ try:
  g=call('/api/generate',payload);assert g['audit']['mode']=='details' and g['audit']['orders']==100 and g['audit']['late']==5 and g['audit']['storeLate']==6 and g['audit']['mismatchCount']==1 and len(g['images'])==1
  with urllib.request.urlopen(url+g['archive']) as r:assert zipfile.ZipFile(io.BytesIO(r.read())).testzip() is None
  # Confirmed names must persist across process restart and new uploads.
- view=call('/api/collector-names',b'{}');assert not view['entries']
+ view=call('/api/collector-names',b'{}')
+ if args.installed and args.reuse:
+  assert any(entry['id']=='999' and entry['name']=='Постоянный Сборщик' for entry in view['entries'])
+  call('/api/collector-names/remove',json.dumps({'revision':view['revision'],'collectorId':'999'}).encode())
+  view=call('/api/collector-names',b'{}')
+ assert not view['entries']
  assert [r['id'] for r in a['nameDirectory']['pending']]==['2']
  view=call('/api/collector-names/save',json.dumps({'id':a['id'],'revision':view['revision'],'entries':[{'id':'2','name':'Демо Сохранённый Сборщик'}]}).encode())
  assert not view['pending'] and len(view['entries'])==1
@@ -148,6 +155,8 @@ try:
  call('/api/collector-names/remove',json.dumps({'revision':view['revision'],'collectorId':'2'}).encode())
  assert not call('/api/collector-names',b'{}')['entries']
  if args.installed:
+  current=call('/api/collector-names',b'{}')
+  call('/api/collector-names/save',json.dumps({'revision':current['revision'],'entries':[{'id':'999','name':'Постоянный Сборщик'}]}).encode())
   (locations.data/'survival.txt').write_text('сохранить',encoding='utf-8')
   (output/'survival.txt').write_text('сохранить',encoding='utf-8')
   assert json.loads(settingsfile.read_text(encoding='utf-8'))['theme']=='light'
