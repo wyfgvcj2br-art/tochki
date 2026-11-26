@@ -7,7 +7,7 @@ from pathlib import Path
 from engine import analyze,generate,select,selection_inputs,DEFAULT_CODES
 from collector_names import NameDirectory,directory_view,sightings,apply_directory
 from output_folders import check_folder
-from app_paths import paths
+from app_paths import paths,product_version
 LOCATIONS=paths()
 ASSETS=Path(__file__).resolve().parent
 ROOT=Path(os.environ.get('TT_DATA_DIR',str(LOCATIONS.data)));ROOT.mkdir(parents=True,exist_ok=True)
@@ -27,7 +27,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Host') not in [f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}']:return self.reply(403,{'error':'Недопустимый адрес приложения.'})
             if p=='/api/health':return self.reply(200,{'app':APP_ID})
             if p=='/api/output-folder':return self.reply(200,{'path':str(RESULTS)})
-            if p=='/api/config':return self.reply(200,{'codes':DEFAULT_CODES,'version':'1.0'})
+            if p=='/api/config':return self.reply(200,{'codes':DEFAULT_CODES,'version':product_version(ASSETS)})
             if p.startswith('/files/'):
                 bits=p.split('/');rid=bits[2];filename=urllib.parse.unquote('/'.join(bits[3:]));folder=RUNS.get(rid)
                 if not folder:return self.reply(404,{'error':'Файл не найден.'})

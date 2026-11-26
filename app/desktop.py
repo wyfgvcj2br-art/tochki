@@ -55,6 +55,9 @@ class DesktopAPI:
             return {'ok':True}
         except (ValueError,OSError) as error:return {'error':str(error)}
 
+    def get_app_info(self):
+        from app_paths import product_version
+        return {'version':product_version(PATHS.resources),'mode':PATHS.mode}
     def get_migration_status(self):
         from portable_migration import migration_status
         return {'available':PATHS.mode=='installed',**(migration_status(DATA) if PATHS.mode=='installed' else {'pending':False})}

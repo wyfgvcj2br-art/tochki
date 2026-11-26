@@ -19,6 +19,9 @@ async function applyNativeSettings(){
 async function initializeNative(){
  if(nativeStarted)return;nativeStarted=true;
  document.body.classList.add('desktop');$('native-titlebar').hidden=false;$('output-folder-settings').hidden=false;
+ const info=await window.pywebview.api.get_app_info();
+ $('product-version').textContent='Версия '+info.version+(info.mode==='portable'?' · Portable':'');
+ document.querySelector('.native-subtitle').textContent=info.mode==='portable'?'/ PORTABLE':'/ DESKTOP';
  await applyNativeSettings();
  const migration=await window.pywebview.api.get_migration_status();
  $('migration-open').hidden=!migration.available;

@@ -80,3 +80,10 @@ def result_setting(locations, path):
     if locations.mode == 'installed':
         return {'path': str(path), 'relative': False}
     return folder_setting(locations.app, path)
+
+def product_version(resources=None):
+    root=Path(resources or Path(__file__).resolve().parent)
+    for file in (root/'VERSION',root.parent/'VERSION'):
+        if file.is_file():
+            return file.read_text(encoding='utf-8').strip()
+    raise ValueError('Не найден VERSION. Переустановите приложение.')

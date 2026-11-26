@@ -10,7 +10,9 @@ body[data-theme=dark]{color-scheme:dark;background:#090F18;color:#D3DFE9;backgro
 .output-folder-settings{margin:14px 0 20px;padding-top:16px;border-top:1px solid #E0E7EC}.output-folder-path{padding:10px 11px;border:1px solid #DDE4EB;border-radius:6px;background:#F6F8FA;color:#506377;font-size:10px;line-height:1.6;overflow-wrap:anywhere;max-height:96px;overflow:auto;user-select:text}.folder-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0}.folder-actions .secondary-button{margin:0;width:auto;padding:9px 11px;font-size:10px}.folder-actions .text-button{font-size:10px;padding:6px 0}.output-folder-settings small,#output-folder-status{display:block;font-size:10px;line-height:1.6;color:#748C9D}#output-folder-status:not(:empty){margin-top:8px;color:#67936E}.result-location{overflow-wrap:anywhere}body[data-theme=dark] .output-folder-settings{border-color:#223447}body[data-theme=dark] .output-folder-path{background:#0A1420;border-color:#2B4155;color:#ADCADB}body[data-theme=dark] .output-folder-settings small{color:#64849B}body[data-theme=dark] #output-folder-status{color:#A3C6A1}
 
 /* Native dialogs and narrow work areas at high Windows DPI. */
-#migration-dialog{border:1px solid var(--border,#334155);border-radius:16px;padding:0;background:var(--card,#111b2a);color:inherit;width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
+#migration-dialog{border:1px solid var(--border,#334155);border-radius:16px;padding:0;background:#FFF;color:#20364B;width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
 #migration-dialog::backdrop{background:#0009}
 #migration-status,#migration-files{overflow-wrap:anywhere;margin:14px 0}
 @media(max-width:900px){.sidebar{width:200px;flex-shrink:0}.layout{grid-template-columns:1fr}.settings{position:static}.content{padding:20px}.native-titlebar{min-height:34px}}
+
+body[data-theme=dark] #migration-dialog{background:#0C1825;border-color:#2B465B;color:#C0D9E8}
