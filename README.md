@@ -14,6 +14,10 @@ Python / pywebview приложение для отчётов по торгов�
 с обычными правами пользователя.
 
 Артефакты ветки доступны в [Windows CI](https://github.com/wyfgvcj2br-art/tochki/actions/workflows/windows.yml).
+[Проверенная сборка 2.6.0: EXE, SHA-256 и журналы](https://github.com/wyfgvcj2br-art/tochki/actions/runs/45866966039/artifacts/15140858833).
+Все 62 теста и пакетные Windows-проверки прошли; ручные ограничения перечислены
+в VALIDATION_REPORT.md. [Файлы и коммиты](CHANGES_2.6.0.md).
+
 Версия 2.6.0 проходит подготовку в `feature/windows-installer`; финальный релиз
 не публикуется автоматически. [Последний опубликованный релиз](https://github.com/wyfgvcj2br-art/tochki/releases/latest)
 может содержать предыдущую Portable-версию.

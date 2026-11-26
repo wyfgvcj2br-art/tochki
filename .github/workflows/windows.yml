@@ -53,7 +53,7 @@ jobs:
             dist/SHA256SUMS.txt
             dist/installer-build.json
             .cache/tools
-          key: windows-x64-installer-${{ hashFiles('app/**', 'installer/**', 'scripts/build_*', 'scripts/windows_metadata.py', 'requirements*.txt', 'VERSION', 'INSTALLATION.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/windows.yml') }}
+          key: windows-x64-installer-${{ hashFiles('app/**/*.py', 'app/ui/**', 'app/*.ico', 'installer/**', 'scripts/build_*', 'scripts/windows_metadata.py', 'requirements*.txt', 'VERSION', 'INSTALLATION.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/windows.yml') }}
       - name: Build offline Windows installer
         if: steps.installer-cache.outputs.cache-hit != 'true'
         run: python scripts/build_installer.py --accept-runtime-license
