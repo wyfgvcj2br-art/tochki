@@ -10,7 +10,7 @@ $evidence = Join-Path $root '.cache/validation'
 New-Item -ItemType Directory -Path $evidence -Force | Out-Null
 $installFolder = Join-Path $env:ProgramFiles 'Tochki'
 $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{CB821F4C-9D80-4F96-9C9F-75F389817D98}_is1'
-$shortcut = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Точки/Точки.lnk'
+$shortcut = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Точки/Точки.lnk'))
 $python = (Get-Command python).Source
 $userName = 'ТочкиТест'
 $plainPassword = 'Tt!' + [guid]::NewGuid().ToString('N') + 'Aa9'
@@ -34,7 +34,12 @@ function Invoke-User([string]$Phase, [string]$Label) {
     $runner = Join-Path $PSScriptRoot 'run_installer_user.ps1'
     $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
     $process = Start-Process -FilePath $powershell -WindowStyle Hidden -Credential $credential -LoadUserProfile -WorkingDirectory $evidence -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$runner`"","`"$job`"") -RedirectStandardOutput (Join-Path $evidence "$Label-stdout.log") -RedirectStandardError (Join-Path $evidence "$Label-stderr.log") -Wait -PassThru
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $result)) { throw "Standard user test failed: $Label; inspect validation logs." }
+    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $result)) {
+        Get-Content -LiteralPath (Join-Path $evidence "$Label-stdout.log") -ErrorAction SilentlyContinue | Write-Output
+        Get-Content -LiteralPath (Join-Path $evidence "$Label-stderr.log") -ErrorAction SilentlyContinue | Write-Output
+        Get-ChildItem -LiteralPath $evidence -Filter '*-diagnostic-*' | ForEach-Object { Get-Content -LiteralPath $_.FullName -ErrorAction SilentlyContinue | Write-Output }
+        throw "Standard user test failed: $Label; inspect validation logs."
+    }
     $status = Get-Content -LiteralPath $result -Raw | ConvertFrom-Json
     if (-not $status.success) { throw "Standard user test failed: $($status.error)" }
 }
@@ -56,7 +61,11 @@ try {
     Invoke-Setup (Join-Path $baselineDir 'Tochki-Setup-x64.exe') 'clean-install' @('/TASKS=desktopicon')
     if (-not (Test-Path -LiteralPath $shortcut)) { throw 'Start menu shortcut missing.' }
     $shell = New-Object -ComObject WScript.Shell
-    if ($shell.CreateShortcut($shortcut).TargetPath -ne (Join-Path $installFolder 'Точки.exe')) { throw 'Wrong Start menu target.' }
+    $target = $shell.CreateShortcut($shortcut).TargetPath
+    $expectedTarget = Join-Path $installFolder 'Точки.exe'
+    Write-Output "Start menu target: $target; expected: $expectedTarget"
+    & $python -c "from pathlib import Path; import sys; assert Path(sys.argv[1]).samefile(sys.argv[2])" $target $expectedTarget
+    if ($LASTEXITCODE -ne 0) { throw 'Wrong Start menu target.' }
     if ((Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne '2.5.99') { throw 'Baseline uninstall registration missing.' }
     $runtime = @(Get-ChildItem -LiteralPath (Join-Path $installFolder 'WebView2') -Filter msedgewebview2.exe -Recurse)
     if ($runtime.Count -ne 1) { throw 'Wrong fixed runtime payload.' }

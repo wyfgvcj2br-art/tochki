@@ -16,6 +16,14 @@ try {
     exit 0
 } catch {
     $_ | Out-String | Write-Output
+    $logs = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Tochki/Logs'
+    $destination = Split-Path -Parent $job.result
+    if (Test-Path -LiteralPath $logs) {
+        Get-ChildItem -LiteralPath $logs -File | ForEach-Object {
+            $name = (Split-Path -Leaf $job.result) + '-diagnostic-' + $_.Name
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $destination $name) -ErrorAction SilentlyContinue
+        }
+    }
     @{ phase=$job.phase; user=[Environment]::UserName; success=$false; error=$_.ToString() } |
         ConvertTo-Json | Set-Content -LiteralPath $job.result -Encoding utf8
     exit 1
