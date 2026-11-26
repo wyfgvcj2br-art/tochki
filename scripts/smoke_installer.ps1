@@ -57,6 +57,13 @@ try {
         Invoke-User 'environment' 'standard-user-environment'
         return
     }
+    # First exercise the exact delivered 2.6.0 installer on an empty destination.
+    Invoke-Setup $setup 'clean-final-setup' @('/TASKS=desktopicon')
+    if ((Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne $version) { throw 'Clean setup version is wrong.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $installFolder 'Точки.exe'))) { throw 'Clean setup EXE missing.' }
+    if (-not (Test-Path -LiteralPath $shortcut)) { throw 'Clean setup Start menu shortcut missing.' }
+    Invoke-Setup (Join-Path $installFolder 'unins000.exe') 'clean-final-remove'
+    if (Test-Path -LiteralPath (Join-Path $installFolder 'Точки.exe')) { throw 'Clean setup EXE was not removed.' }
     # Synthetic prior installed version exercises a genuine Inno version transition.
     $baselineDir = Join-Path $evidence 'baseline'
     New-Item -ItemType Directory -Path $baselineDir -Force | Out-Null
@@ -99,6 +106,7 @@ try {
        hostPython='test harness only; app launched with Windows-only PATH'
        manualNotTested=@('Windows 10','clean OS without Python installation','interactive installer pages','native migration confirmation and folder dialogs','actual Windows DPI 100/125/150/200')
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'installation-results.json') -Encoding utf8
+    Write-Output ('VALIDATED_INSTALLER_SHA256=' + (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant())
 } finally {
     foreach ($rule in $firewallRules) { Remove-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue }
     if (Get-LocalUser -Name $userName -ErrorAction SilentlyContinue) { Remove-LocalUser -Name $userName -ErrorAction SilentlyContinue }
