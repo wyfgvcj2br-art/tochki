@@ -20,7 +20,8 @@ def known_folder(name):
     shell.SHGetKnownFolderPath.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,
                                            ctypes.POINTER(ctypes.c_wchar_p)]
     shell.SHGetKnownFolderPath.restype = ctypes.c_long
-    hr = shell.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(result))
+    # KF_FLAG_DONT_VERIFY also returns redirected Documents while its disk is offline.
+    hr = shell.SHGetKnownFolderPath(ctypes.byref(guid), 0x4000, None, ctypes.byref(result))
     if hr < 0:
         raise OSError(f'SHGetKnownFolderPath({name}): HRESULT 0x{hr & 0xffffffff:08x}')
     try:

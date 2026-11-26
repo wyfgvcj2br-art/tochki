@@ -2,9 +2,9 @@ name: Build Windows installer and portable
 on:
   push:
     branches: [main, feature/windows-installer]
-    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', '*.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/**']
+    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', 'INSTALLATION.md', 'PORTABLE.txt', 'licenses/**', '.github/workflows/**']
   pull_request:
-    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', '*.md', '.github/workflows/**']
+    paths: ['app/**', 'installer/**', 'scripts/**', 'tests/**', 'requirements*.txt', 'VERSION', 'INSTALLATION.md', '.github/workflows/**']
   workflow_dispatch:
 permissions:
   contents: read

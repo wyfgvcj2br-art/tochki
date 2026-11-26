@@ -23,6 +23,7 @@ function Invoke-Setup([string]$File, [string]$Label, [string[]]$Extra=@()) {
     if ($process.ExitCode -ne 0) { throw "$Label failed: $($process.ExitCode)" }
 }
 function Invoke-User([string]$Phase, [string]$Label) {
+    Write-Output "Testing standard user phase: $Label"
     $job = Join-Path $evidence "$Label-job.json"
     $result = Join-Path $evidence "$Label-result.json"
     @{
@@ -56,16 +57,13 @@ try {
     New-Item -ItemType Directory -Path $baselineDir -Force | Out-Null
     $compiler = Join-Path $root '.cache/tools/inno-7.1.1/ISCC.exe'
     $payload = Join-Path $root 'dist/installed/Точки'
-    & $compiler '/DAppVersion=2.5.99' "/DPayload=$payload" "/DOutputPath=$baselineDir" (Join-Path $root 'installer/Tochki.iss')
+    & $compiler '/DAppVersion=2.5.99' '/DBaselineTest=1' "/DPayload=$payload" "/DOutputPath=$baselineDir" (Join-Path $root 'installer/Tochki.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Baseline installer compilation failed.' }
     Invoke-Setup (Join-Path $baselineDir 'Tochki-Setup-x64.exe') 'clean-install' @('/TASKS=desktopicon')
     if (-not (Test-Path -LiteralPath $shortcut)) { throw 'Start menu shortcut missing.' }
-    $shell = New-Object -ComObject WScript.Shell
-    $target = $shell.CreateShortcut($shortcut).TargetPath
-    $expectedTarget = Join-Path $installFolder 'Точки.exe'
-    Write-Output "Start menu target: $target; expected: $expectedTarget"
-    & $python -c "from pathlib import Path; import sys; assert Path(sys.argv[1]).samefile(sys.argv[2])" $target $expectedTarget
-    if ($LASTEXITCODE -ne 0) { throw 'Wrong Start menu target.' }
+    if ((Get-Item -LiteralPath $shortcut).Length -eq 0) { throw 'Empty Start menu shortcut.' }
+    # Resolve and launch the .lnk through Windows Shell under the standard user.
+    # WScript.Shell may expose an empty TargetPath for a shell-ID-list link.
     if ((Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne '2.5.99') { throw 'Baseline uninstall registration missing.' }
     $runtime = @(Get-ChildItem -LiteralPath (Join-Path $installFolder 'WebView2') -Filter msedgewebview2.exe -Recurse)
     if ($runtime.Count -ne 1) { throw 'Wrong fixed runtime payload.' }

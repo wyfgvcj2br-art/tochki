@@ -38,8 +38,13 @@ VersionInfoDescription=Установка приложения ТОЧКИ
 VersionInfoProductName=ТОЧКИ
 VersionInfoProductVersion={#AppVersion}
 WizardStyle=modern
+#ifdef BaselineTest
+Compression=zip
+SolidCompression=no
+#else
 Compression=lzma2
 SolidCompression=yes
+#endif
 DiskSpanning=no
 CloseApplications=yes
 RestartApplications=no
@@ -81,6 +86,15 @@ begin
     MsgBox('Выберите новую папку установки. Данные старой Portable-версии можно импортировать после первого запуска.', mbError, MB_OK);
     Result := False;
   end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if FileExists(ExpandConstant('{app}\portable.json')) or
+     (DirExists(ExpandConstant('{app}\Data')) and
+      not FileExists(ExpandConstant('{app}\distribution.json'))) then
+    Result := 'Нельзя устанавливать поверх Portable. Выберите новую папку и импортируйте Data после запуска.';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
