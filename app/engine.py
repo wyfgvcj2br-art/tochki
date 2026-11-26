@@ -163,7 +163,7 @@ def pct(v):return '—' if v is None else f'{v*100:.2f}%'.replace('.',',')
 def n(v):return f'{v:g}' if v is not None else '—'
 
 def picture(group,dates,path,good,bad,only_appeals=False):
-    width=1500; x=[0,650,850,1050,1280,1500]; rows=[]
+    rows=[]
     amap=collections.defaultdict(list)
     for a in group['appeals']:amap[a['date']].append(a)
     if only_appeals:
@@ -176,24 +176,19 @@ def picture(group,dates,path,good,bad,only_appeals=False):
             for a in amap[r['date']]:rows.append(([a['name'] or 'ФИО не указано','','','',n(a['count'])],None,'appeal'))
     ratio=group['late']/group['orders'] if group['orders'] else None
     rows.append((['Итого за неделю',n(group['orders']) if not only_appeals else '',n(group['late']) if not only_appeals else '',pct(ratio) if not only_appeals else '',n(sum(a['count'] for a in group['appeals']))],ratio,'total'))
-    height=180+len(rows)*52;im=Image.new('RGB',(width,height),'white');draw=ImageDraw.Draw(im)
-    draw.text((20,18),group['tt'],font=font(30,True),fill='#243E52')
-    period=f'{dt.date.fromisoformat(dates[0]):%d.%m.%Y} — {dt.date.fromisoformat(dates[-1]):%d.%m.%Y}'
-    draw.text((20,68),period,font=font(20),fill='#607484')
-    draw.rectangle((0,115,width,180),fill='#294B63')
-    labels=['Дата / ФИО','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок','Обращения, шт.'] if not only_appeals else ['Дата / ФИО','','','','Обращения, шт.']
-    for i,label in enumerate(labels):draw.text(((x[i]+x[i+1])/2,147),label,font=font(20,True),fill='white',anchor='mm')
-    for j,(vals,v,kind) in enumerate(rows):
-        y=180+j*52;fill='#DCE6ED' if kind=='total' else '#EFF4F7' if kind=='day' else 'white';draw.rectangle((0,y,width,y+52),fill=fill)
-        if kind!='appeal' and not only_appeals:draw.rectangle((x[3],y,x[4],y+52),fill=color(v,good,bad))
-        for i,value in enumerate(vals):
-            f=font(21,kind=='total' or i==3)
-            if i==0:
-                while draw.textlength(value,font=f)>615 and f.size>14:f=font(f.size-1,kind=='total')
-                draw.text((20,y+26),value,font=f,fill='#243D50',anchor='lm')
-            else:draw.text(((x[i]+x[i+1])/2,y+26),value,font=f,fill='#243D50',anchor='mm')
-        draw.line((0,y+51,width,y+51),fill='#DCE4EA')
-    im.save(path)
+    from report_style import report_picture
+    if only_appeals:
+        rows=[([values[0],values[4]],ratio,kind) for values,ratio,kind in rows]
+        labels=['Дата / ФИО','Обращения, шт.']
+        edges=[32,1200,1468]
+    else:
+        labels=['Дата / ФИО','Заказы УЗ, шт.','Просрочено, шт.','Общий просрок','Обращения, шт.']
+        edges=[32,650,850,1050,1280,1468]
+    report_picture(group['tt'],dates,path,labels,rows,edges,font,
+                   report_name='Обращения' if only_appeals else 'Отчёт по торговым точкам',
+                   rate_column=None if only_appeals else 3,
+                   rate_color=lambda value: color(value,good,bad))
+
 
 def generate(data,opts,folder):
     if data['errors']:raise ValueError('Сначала устраните ошибки в загруженных данных.')
