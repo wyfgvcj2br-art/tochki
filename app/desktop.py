@@ -1,15 +1,18 @@
 from __future__ import annotations
-import ctypes,json,os,sys,threading,traceback,subprocess
+import ctypes,dataclasses,hashlib,json,os,sys,threading,traceback,subprocess
 from pathlib import Path
-from output_folders import resolve_folder,folder_setting,check_folder
-APP=Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent
-DATA=APP/'Data'
-try:DATA.mkdir(parents=True,exist_ok=True)
-except OSError:
-    ctypes.windll.user32.MessageBoxW(None,'Распакуйте приложение в папку с правом записи, например на рабочий стол или USB-накопитель.','Точки Portable',16)
-    raise
-os.environ['TT_DATA_DIR']=str(DATA)
-os.environ['TT_OUTPUT_DIR']=str(APP/'Результаты')
+from app_paths import paths,result_folder,result_setting
+from settings_store import read_settings,save_settings,atomic_write
+from output_folders import check_folder
+
+PATHS=paths()
+APP=PATHS.app
+DATA=PATHS.data
+settings_lock=threading.RLock()
+
+def current_paths():
+    return dataclasses.replace(PATHS,app=APP,data=DATA)
+
 class DesktopAPI:
     def __init__(self):self._window=None;self._expanded=False
     def minimize(self):self._window.minimize()
@@ -18,13 +21,11 @@ class DesktopAPI:
         else:self._window.maximize()
         self._expanded=not self._expanded
     def close(self):self._window.destroy()
-    def load_settings(self):
-        try:return json.loads((DATA/'settings.json').read_text(encoding='utf-8'))
-        except Exception:return {}
+    def load_settings(self):return read_settings(DATA/'settings.json')
     def _save(self,kind,value):
         with settings_lock:
             settings=self.load_settings();settings[kind]=value
-            (DATA/'settings.json').write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding='utf-8')
+            save_settings(DATA/'settings.json',settings)
         return True
     def save_theme(self,value):return self._save('theme','light' if value=='light' else 'dark')
     def save_options(self,value):
@@ -38,10 +39,10 @@ class DesktopAPI:
         import server,webview
         try:
             current=server.RESULTS
-            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER,directory=str(current if current.is_dir() else APP))
+            chosen=self._window.create_file_dialog(webview.FileDialog.FOLDER,directory=str(current if current.is_dir() else PATHS.reports.parent))
             if not chosen:return {'cancelled':True,'path':str(current)}
             path=check_folder(chosen[0])
-            self._save('outputFolder',folder_setting(APP,path))
+            self._save('outputFolder',result_setting(current_paths(),path))
             server.RESULTS=path
             return {'path':str(path)}
         except (ValueError,OSError) as error:return {'error':str(error)}
@@ -53,42 +54,90 @@ class DesktopAPI:
             os.startfile(path)
             return {'ok':True}
         except (ValueError,OSError) as error:return {'error':str(error)}
-settings_lock=threading.Lock()
-def main():
+
+def configure_windows():
     try:
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    except (AttributeError,OSError):pass
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SaudadeMeow.Tochki')
+
+def main():
+    http=None;thread=None;statefile=None;state={};mutex=None
+    try:
+        PATHS.ensure()
+        configure_windows()
+        kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+        kernel.CreateMutexW.argtypes=[ctypes.c_void_p,ctypes.c_bool,ctypes.c_wchar_p]
+        kernel.CreateMutexW.restype=ctypes.c_void_p
+        mutex=kernel.CreateMutexW(None,False,'Local\\Tochki-'+hashlib.sha256(str(DATA).encode()).hexdigest()[:24])
+        if ctypes.get_last_error()==183:
+            ctypes.windll.user32.MessageBoxW(None,'«Точки» уже запущены для этого профиля.','Точки',64)
+            return
+        os.environ['TT_DATA_DIR']=str(DATA)
+        os.environ['TT_OUTPUT_DIR']=str(PATHS.reports)
+        os.environ['TT_LOG_DIR']=str(PATHS.logs)
+        # Runtime web traffic is local. Disable background services and proxy all
+        # non-loopback browser requests to an unused local port, including offline use.
+        os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']=(
+            '--disable-background-networking --disable-component-update --disable-sync '
+            '--disable-domain-reliability --no-first-run --no-default-browser-check '
+            '--proxy-server=http://127.0.0.1:9 --proxy-bypass-list=localhost;127.0.0.1')
         import webview
         import server
         from http.server import ThreadingHTTPServer
         api=DesktopAPI()
-        server.RESULTS=resolve_folder(APP,api.load_settings().get('outputFolder'))
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SaudadeMeow.Tochki.Portable.2.1')
+        try:server.RESULTS=result_folder(PATHS,api.load_settings().get('outputFolder'))
+        except ValueError:
+            # Keep malformed settings intact; the UI reports the error and offers import.
+            server.RESULTS=PATHS.reports
         runtime_root=APP/'WebView2'
         runtimes=sorted(runtime_root.rglob('msedgewebview2.exe')) if runtime_root.is_dir() else []
-        if not runtimes:raise RuntimeError('Нет встроенного WebView2. Распакуйте весь portable-архив, а не только EXE.')
+        if len(runtimes)!=1:raise RuntimeError('Встроенный WebView2 отсутствует или повреждён. Переустановите приложение либо распакуйте полный Portable-архив.')
         runtime=runtimes[0].parent
         webview.settings['WEBVIEW2_RUNTIME_PATH']=str(runtime)
         os.environ['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER']=str(runtime)
-        # Microsoft Fixed Version v120+ requires read/execute ACLs for AppContainers on Windows 10.
-        if sys.getwindowsversion().build<22000:
+        if PATHS.mode=='portable' and sys.getwindowsversion().build<22000:
             subprocess.run(['icacls',str(runtime),'/grant','*S-1-15-2-2:(OI)(CI)(RX)','/grant','*S-1-15-2-1:(OI)(CI)(RX)'],creationflags=subprocess.CREATE_NO_WINDOW,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        http=ThreadingHTTPServer(('127.0.0.1',0),server.Handler);thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+        http=ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+        http.daemon_threads=True
+        thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
         url=f'http://127.0.0.1:{http.server_port}'
-        state={'url':url,'pid':os.getpid(),'app':str(APP),'runtime':str(runtime),'mode':'portable','ready':False}
-        statefile=DATA/'desktop-state.json'
-        statefile.write_text(json.dumps(state),encoding='utf-8')
+        state={'url':url,'pid':os.getpid(),'app':str(APP),'runtime':str(runtime),'mode':PATHS.mode,
+               'data':str(DATA),'webview':str(PATHS.webview),'logs':str(PATHS.logs),
+               'reports':str(server.RESULTS),'ready':False}
+        statefile=(DATA if PATHS.mode=='portable' else PATHS.logs)/'desktop-state.json'
+        def write_state():atomic_write(statefile,json.dumps(state,ensure_ascii=False).encode('utf-8'))
+        write_state()
         webview.settings['ALLOW_DOWNLOADS']=True
-        window=webview.create_window('Точки · Prod. by Saudade_meow',url=url,js_api=api,width=1380,height=920,min_size=(1000,700),frameless=True,easy_drag=False,shadow=True,background_color='#090F18',text_select=True)
+        window=webview.create_window('Точки · Prod. by Saudade_meow',url=url,js_api=api,width=1380,height=920,min_size=(720,520),frameless=True,easy_drag=False,shadow=True,background_color='#090F18',text_select=True)
         api._window=window
         def loaded():
             state['ready']=True
-            statefile.write_text(json.dumps(state),encoding='utf-8')
+            try:state['hwnd']=int(window.native.Handle.ToInt64())
+            except (AttributeError,TypeError):pass
+            write_state()
         window.events.loaded+=loaded
-        window.events.closed+=lambda:http.shutdown()
-        icon=Path(__file__).resolve().parent/'Точки.ico'
-        webview.start(gui='edgechromium',private_mode=False,storage_path=str(DATA/'WebView'),icon=str(icon),debug=False)
-        http.server_close()
+        icon=PATHS.resources/'Точки.ico'
+        webview.start(gui='edgechromium',private_mode=False,storage_path=str(PATHS.webview),icon=str(icon),debug=False)
     except Exception:
-        error=traceback.format_exc();(DATA/'Ошибка.txt').write_text(error,encoding='utf-8')
-        ctypes.windll.user32.MessageBoxW(None,f'Не удалось запустить «Точки».\nПодробности: {DATA / "Ошибка.txt"}','Точки',16)
+        error=traceback.format_exc()
+        try:
+            PATHS.logs.mkdir(parents=True,exist_ok=True)
+            atomic_write(PATHS.logs/'Ошибка.txt',error.encode('utf-8'))
+            message=f'Не удалось запустить «Точки».\nПодробности: {PATHS.logs / "Ошибка.txt"}'
+        except OSError:message='Не удалось открыть папку данных «Точки». Проверьте доступ к профилю Windows.'
+        ctypes.windll.user32.MessageBoxW(None,message,'Точки',16)
         raise
+    finally:
+        if http:
+            http.shutdown();http.server_close()
+        if thread:thread.join(timeout=5)
+        if statefile and state:
+            state['ready']=False
+            try:atomic_write(statefile,json.dumps(state,ensure_ascii=False).encode('utf-8'))
+            except OSError:pass
+        if mutex:
+            ctypes.windll.kernel32.CloseHandle.argtypes=[ctypes.c_void_p]
+            ctypes.windll.kernel32.CloseHandle(mutex)
+
 if __name__=='__main__':main()

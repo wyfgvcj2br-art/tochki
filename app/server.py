@@ -7,9 +7,12 @@ from pathlib import Path
 from engine import analyze,generate,select,selection_inputs,DEFAULT_CODES
 from collector_names import NameDirectory,directory_view,sightings,apply_directory
 from output_folders import check_folder
+from app_paths import paths
+LOCATIONS=paths()
 ASSETS=Path(__file__).resolve().parent
-ROOT=Path(os.environ.get('TT_DATA_DIR',str(ASSETS)));ROOT.mkdir(parents=True,exist_ok=True)
-RESULTS=Path(os.environ.get('TT_OUTPUT_DIR',str(ROOT/'Результаты')))
+ROOT=Path(os.environ.get('TT_DATA_DIR',str(LOCATIONS.data)));ROOT.mkdir(parents=True,exist_ok=True)
+LOGS=Path(os.environ.get('TT_LOG_DIR',str(LOCATIONS.logs)));LOGS.mkdir(parents=True,exist_ok=True)
+RESULTS=Path(os.environ.get('TT_OUTPUT_DIR',str(LOCATIONS.reports)))
 NAMES=NameDirectory(ROOT)
 JOBS={};RUNS={};LOCK=threading.Lock();APP_ID=hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
 def json_bytes(v):return json.dumps(v,ensure_ascii=False).encode('utf-8')
@@ -91,10 +94,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404,{'error':'Команда не найдена.'})
         except (ValueError,KeyError) as e:self.reply(400,{'error':str(e)})
         except Exception as e:
-            (ROOT/'Ошибка.txt').write_text(traceback.format_exc(),encoding='utf-8');self.reply(500,{'error':'Не удалось завершить обработку. Подробности сохранены в «Ошибка.txt» рядом с приложением.'})
+            (LOGS/'Ошибка.txt').write_text(traceback.format_exc(),encoding='utf-8');self.reply(500,{'error':'Не удалось завершить обработку. Подробности сохранены в «Ошибка.txt» в папке журналов приложения.'})
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--no-browser',action='store_true');parser.add_argument('--port',type=int,default=0);args=parser.parse_args()
-    state=ROOT/'.server.json'
+    state=LOGS/'.server.json'
     if not args.port and state.exists():
         try:
             import urllib.request
