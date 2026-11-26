@@ -1,6 +1,6 @@
 ﻿# This script mutates only a disposable Windows CI machine.
 [CmdletBinding()]
-param([switch]$CI)
+param([switch]$CI, [switch]$EnvironmentOnly)
 $ErrorActionPreference = 'Stop'
 if (-not $env:GITHUB_ACTIONS -and -not $CI) { throw 'Run on a disposable Windows test machine with -CI.' }
 $root = Split-Path -Parent $PSScriptRoot
@@ -30,6 +30,7 @@ function Invoke-User([string]$Phase, [string]$Label) {
         phase=$Phase; python=$python; installFolder=$installFolder; shortcut=$shortcut
         smokeScript=(Join-Path $PSScriptRoot 'smoke_portable.py')
         verifyScript=(Join-Path $PSScriptRoot 'verify_user_data.py')
+        environmentScript=(Join-Path $PSScriptRoot 'check_user_environment.py')
         result=$result
     } | ConvertTo-Json | Set-Content -LiteralPath $job -Encoding utf8
     $runner = Join-Path $PSScriptRoot 'run_installer_user.ps1'
@@ -52,6 +53,10 @@ try {
     Add-LocalGroupMember -Group $usersGroup -Member $userName
     & icacls.exe $evidence /grant '*S-1-5-32-545:(OI)(CI)(M)' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not grant access to validation evidence.' }
+    if ($EnvironmentOnly) {
+        Invoke-User 'environment' 'standard-user-environment'
+        return
+    }
     # Synthetic prior installed version exercises a genuine Inno version transition.
     $baselineDir = Join-Path $evidence 'baseline'
     New-Item -ItemType Directory -Path $baselineDir -Force | Out-Null

@@ -2,6 +2,8 @@
 import json
 import sys
 from pathlib import Path
+from windows_test_environment import restore_user_environment
+restore_user_environment()
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'app'))
 from app_paths import paths
 locations=paths(app=Path(sys.argv[1]),mode='installed')

@@ -8,6 +8,9 @@ from settings_store import save_settings
 parser=argparse.ArgumentParser();parser.add_argument('folder',type=Path)
 parser.add_argument('--installed',action='store_true');parser.add_argument('--standard-user',action='store_true');parser.add_argument('--shortcut',type=Path);parser.add_argument('--reuse',action='store_true')
 args=parser.parse_args();folder=args.folder.resolve()
+if args.standard_user:
+ from windows_test_environment import restore_user_environment
+ restore_user_environment()
 locations=paths(app=folder,mode='installed' if args.installed else 'portable')
 locations.ensure()
 if args.standard_user:assert not ctypes.windll.shell32.IsUserAnAdmin(),'Expected a non-administrator account'
@@ -168,5 +171,9 @@ try:
     raise RuntimeError('Shortcut-launched process did not exit')
   close_app(StartedProcess(),shortcut_state)
  print('Packaged smoke test passed: reports, saved-name restart, settings, normal close, WebView2 cleanup; installed='+str(args.installed))
+except Exception:
+ if (locations.logs/'Ошибка.txt').is_file():
+  print((locations.logs/'Ошибка.txt').read_text(encoding='utf-8'))
+ raise
 finally:
  if proc.poll() is None:subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

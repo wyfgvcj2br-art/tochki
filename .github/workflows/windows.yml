@@ -38,6 +38,9 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$parseErrors)
             if ($parseErrors) { throw ($parseErrors | Out-String) }
           }
+      - name: Validate alternate Windows user environment
+        shell: pwsh
+        run: ./scripts/smoke_installer.ps1 -EnvironmentOnly
       - name: Run regression, path and migration tests
         run: python -m unittest discover -s tests -v
       - name: Build offline Windows installer
