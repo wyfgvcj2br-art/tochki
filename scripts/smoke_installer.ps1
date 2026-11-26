@@ -1,4 +1,4 @@
-# This script mutates only a disposable Windows CI machine.
+﻿# This script mutates only a disposable Windows CI machine.
 [CmdletBinding()]
 param([switch]$CI)
 $ErrorActionPreference = 'Stop'

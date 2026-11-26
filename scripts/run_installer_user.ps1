@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$JobFile)
+﻿param([Parameter(Mandatory=$true)][string]$JobFile)
 $ErrorActionPreference = 'Stop'
 $job = Get-Content -LiteralPath $JobFile -Raw -Encoding UTF8 | ConvertFrom-Json
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
